@@ -15,6 +15,7 @@ import com.musiclibrary.model.RepeatMode;
 import com.musiclibrary.model.Track;
 import com.musiclibrary.service.audio.AudioPlayer;
 import com.musiclibrary.service.audio.BasicAudioPlayer;
+import com.musiclibrary.service.audio.PlayerListener;
 import com.musiclibrary.service.importer.FolderWatcherService;
 import com.musiclibrary.service.importer.ImportProgressListener;
 import com.musiclibrary.service.importer.ImportResult;
@@ -29,8 +30,21 @@ import com.musiclibrary.ui.dialog.ImportProgressDialog;
 import com.musiclibrary.ui.dialog.TagEditorDialog;
 import com.musiclibrary.ui.dnd.TrackDropTargetListener;
 import com.musiclibrary.model.Album;
+import com.musiclibrary.model.Account;
+import com.musiclibrary.model.PlaylistFolder;
+import com.musiclibrary.repository.AccountRepository;
+import com.musiclibrary.repository.PlaylistFolderRepository;
+import com.musiclibrary.repository.SqliteAccountRepository;
+import com.musiclibrary.repository.SqlitePlaylistFolderRepository;
+import com.musiclibrary.repository.db.DatabaseManager;
+import com.musiclibrary.service.storage.LibraryStorage;
+import com.musiclibrary.service.storage.SqliteLibraryStorage;
+import com.musiclibrary.settings.SettingsManager;
+import com.musiclibrary.ui.dialog.AccountManagerDialog;
+import com.musiclibrary.ui.dialog.NewPlaylistFolderDialog;
 import com.musiclibrary.ui.panel.AlbumGridViewPanel;
 import com.musiclibrary.ui.panel.AlbumHeaderPanel;
+import com.musiclibrary.ui.menu.AppMenuBar;
 import com.musiclibrary.ui.panel.ControlBarPanel;
 import com.musiclibrary.ui.panel.SidebarPanel;
 import com.musiclibrary.ui.panel.StatusBarPanel;
@@ -53,6 +67,8 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -60,14 +76,19 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * Main application window coordinating top control bar, left sidebar,
  * center track table, and bottom status bar in a 3-pane responsive layout.
  */
 public class MainFrame extends JFrame {
+
+    private static final System.Logger LOGGER = System.getLogger(MainFrame.class.getName());
 
     // Domain & Services
     private final Library library;
@@ -96,68 +117,46 @@ public class MainFrame extends JFrame {
     private boolean isAlbumGridActive = false;
     private volatile List<Album> cachedAlbums = null;
 
-    // Menu components
-    private final JMenuBar menuBar;
-    private final JMenu fileMenu;
-    private final JMenuItem addFileItem;
-    private final JMenuItem addFolderItem;
-    private final JMenuItem rescanItem;
-    private final JMenuItem exitItem;
+    // Menu component
+    private final AppMenuBar appMenuBar;
 
-    private final JMenu editMenu;
-    private final JMenuItem editTagsItem;
-
-    private final JMenu viewMenu;
-    private final JMenu themeSubMenu;
-    private final JRadioButtonMenuItem darkThemeItem;
-    private final JRadioButtonMenuItem lightThemeItem;
-    private final JRadioButtonMenuItem systemThemeItem;
-
-    private final JMenu languageSubMenu;
-    private final JRadioButtonMenuItem enLanguageItem;
-    private final JRadioButtonMenuItem jaLanguageItem;
-    private final JRadioButtonMenuItem systemLanguageItem;
-
-    private final JMenuItem miniPlayerItem;
-
-    private final JMenu controlsMenu;
-    private final JMenuItem playItem;
-    private final JMenuItem pauseItem;
-    private final JMenuItem nextItem;
-    private final JMenuItem prevItem;
-    private final JCheckBoxMenuItem shuffleMenuItem;
-    private final JMenu repeatSubMenu;
-    private final JRadioButtonMenuItem repeatOffItem;
-    private final JRadioButtonMenuItem repeatAllItem;
-    private final JRadioButtonMenuItem repeatOneItem;
-
-    private final JMenu helpMenu;
+    // Storage, Account & DB
+    private final Path storagePath;
+    private DatabaseManager dbManager;
+    private Account currentAccount;
+    private SqliteAccountRepository accountRepository;
+    private SqlitePlaylistFolderRepository folderRepository;
+    private LibraryStorage storage;
 
     private final LanguageChangeListener languageListener;
     private final ThemeChangeListener themeListener;
     private final KeyboardShortcutManager shortcutManager;
 
     public MainFrame() {
-        this(new Library(), null, null, null, null, null);
+        this(new Library(), null, null, null, null, null, null);
     }
 
     public MainFrame(Library library, LibraryImportService importService) {
-        this(library, importService, null, null, null, null);
+        this(library, importService, null, null, null, null, null);
     }
 
     public MainFrame(Library library, LibraryImportService importService, Path storagePath) {
-        this(library, importService, null, null, null, storagePath);
+        this(library, importService, null, null, null, storagePath, null);
     }
 
     public MainFrame(Library library, LibraryImportService importService, AudioPlayer customAudioPlayer, PlayerController customPlayerController) {
-        this(library, importService, customAudioPlayer, customPlayerController, null, null);
+        this(library, importService, customAudioPlayer, customPlayerController, null, null, null);
     }
 
     public MainFrame(Library library, LibraryImportService importService, AudioPlayer customAudioPlayer, PlayerController customPlayerController, LibraryController customLibraryController) {
-        this(library, importService, customAudioPlayer, customPlayerController, customLibraryController, null);
+        this(library, importService, customAudioPlayer, customPlayerController, customLibraryController, null, null);
     }
 
     public MainFrame(Library library, LibraryImportService importService, AudioPlayer customAudioPlayer, PlayerController customPlayerController, LibraryController customLibraryController, Path storagePath) {
+        this(library, importService, customAudioPlayer, customPlayerController, customLibraryController, storagePath, null);
+    }
+
+    public MainFrame(Library library, LibraryImportService importService, AudioPlayer customAudioPlayer, PlayerController customPlayerController, LibraryController customLibraryController, Path storagePath, DatabaseManager dbManager) {
         Path effectiveStoragePath;
         if (storagePath != null) {
             effectiveStoragePath = storagePath;
@@ -174,6 +173,29 @@ public class MainFrame extends JFrame {
                 }
             }
         }
+
+        this.storagePath = effectiveStoragePath;
+        this.dbManager = dbManager;
+        this.currentAccount = new Account(Account.DEFAULT_ACCOUNT_ID, "Default User");
+
+        if (this.dbManager != null) {
+            try {
+                this.accountRepository = new SqliteAccountRepository(this.dbManager);
+                this.folderRepository = new SqlitePlaylistFolderRepository(this.dbManager);
+                var existing = this.accountRepository.findById(Account.DEFAULT_ACCOUNT_ID);
+                if (existing.isPresent()) {
+                    this.currentAccount = existing.get();
+                } else {
+                    this.accountRepository.save(this.currentAccount);
+                }
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.WARNING, "Failed to initialize DB repositories in MainFrame: " + e.getMessage(), e);
+            }
+        }
+
+        this.storage = (this.dbManager != null)
+                ? new SqliteLibraryStorage(this.dbManager, this.currentAccount.getId())
+                : new JsonLibraryStorage();
 
         this.library = Objects.requireNonNull(library, "library cannot be null");
         this.importService = (importService != null) ? importService : new LibraryImportService(this.library, effectiveStoragePath);
@@ -196,7 +218,7 @@ public class MainFrame extends JFrame {
         albumHeaderPanel.setVisible(false);
 
         albumGridViewPanel.setOnAlbumSelectedAction(this::openAlbumDetail);
-        albumHeaderPanel.setOnBackAction(this::showAlbumGrid);
+        albumHeaderPanel.setOnBackAction(this::returnFromAlbumDetail);
 
         cardLayout = new CardLayout();
         mainContentPanel = new JPanel(cardLayout);
@@ -215,6 +237,29 @@ public class MainFrame extends JFrame {
         this.trackTablePanel.setOnPlayAction(this::playTrackSafely);
         this.trackTablePanel.setOnPlayNextAction(this::enqueueNextSafely);
         this.trackTablePanel.setOnEditTagsAction(this::openTagEditorForTracks);
+
+        this.audioPlayer.addPlayerListener(new PlayerListener() {
+            @Override
+            public void onTrackStarted(Track track) {
+                trackTablePanel.setPlaybackStatus(track != null ? track.getId() : null, PlaybackState.PLAYING);
+            }
+
+            @Override
+            public void onStateChanged(PlaybackState newState) {
+                Track cur = audioPlayer.getCurrentTrack();
+                trackTablePanel.setPlaybackStatus(cur != null ? cur.getId() : null, newState);
+            }
+
+            @Override
+            public void onTrackFinished(Track track) {
+                trackTablePanel.setPlaybackStatus(null, PlaybackState.STOPPED);
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                trackTablePanel.setPlaybackStatus(null, PlaybackState.STOPPED);
+            }
+        });
 
         // 3. Setup Fast Search Index & Search Controller
         this.searchIndex = new FastSearchIndex();
@@ -239,7 +284,7 @@ public class MainFrame extends JFrame {
                         this.library,
                         this.sidebarPanel,
                         this.trackTablePanel,
-                        new JsonLibraryStorage(),
+                        this.storage,
                         effectiveStoragePath,
                         this.searchIndex
                 );
@@ -296,6 +341,8 @@ public class MainFrame extends JFrame {
             }
         });
 
+        this.sidebarPanel.setOnNewPlaylistFolderAction(this::showNewPlaylistFolderDialog);
+
         this.libraryController.setOnPlayTracksAction(tracks -> {
             if (!tracks.isEmpty()) {
                 this.playerController.play(tracks.get(0), tracks);
@@ -318,90 +365,21 @@ public class MainFrame extends JFrame {
         add(splitPane, BorderLayout.CENTER);
         add(statusBarPanel, BorderLayout.SOUTH);
 
-        // 7. Initialize Menu Bar
-        menuBar = new JMenuBar();
-
-        // File Menu
-        fileMenu = new JMenu();
-        addFileItem = new JMenuItem();
-        addFileItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, KeyEvent.CTRL_DOWN_MASK));
-        addFileItem.addActionListener(e -> chooseFileAndImport());
-
-        addFolderItem = new JMenuItem();
-        addFolderItem.addActionListener(e -> chooseFolderAndImport());
-
-        rescanItem = new JMenuItem();
-        rescanItem.addActionListener(e -> rescanAndRelinkMissing());
-        exitItem = new JMenuItem();
-        exitItem.addActionListener(e -> System.exit(0));
-
-        fileMenu.add(addFileItem);
-        fileMenu.add(addFolderItem);
-        fileMenu.addSeparator();
-        fileMenu.add(rescanItem);
-        fileMenu.addSeparator();
-        fileMenu.add(exitItem);
-        menuBar.add(fileMenu);
-
-        // Edit Menu
-        editMenu = new JMenu();
-        editTagsItem = new JMenuItem();
-        editTagsItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_I, KeyEvent.CTRL_DOWN_MASK));
-        editTagsItem.addActionListener(e -> openTagEditorForSelection());
-        editMenu.add(editTagsItem);
-        menuBar.add(editMenu);
-
-        // View Menu
-        viewMenu = new JMenu();
-
-        // Theme SubMenu
-        themeSubMenu = new JMenu();
-        ButtonGroup themeGroup = new ButtonGroup();
-        darkThemeItem = new JRadioButtonMenuItem();
-        darkThemeItem.addActionListener(e -> ThemeManager.getInstance().applyTheme(AppTheme.DARK));
-        lightThemeItem = new JRadioButtonMenuItem();
-        lightThemeItem.addActionListener(e -> ThemeManager.getInstance().applyTheme(AppTheme.LIGHT));
-        systemThemeItem = new JRadioButtonMenuItem();
-        systemThemeItem.addActionListener(e -> ThemeManager.getInstance().applyTheme(AppTheme.SYSTEM));
-
-        themeGroup.add(darkThemeItem);
-        themeGroup.add(lightThemeItem);
-        themeGroup.add(systemThemeItem);
-        themeSubMenu.add(darkThemeItem);
-        themeSubMenu.add(lightThemeItem);
-        themeSubMenu.add(systemThemeItem);
-
-        // Language SubMenu
-        languageSubMenu = new JMenu();
-        ButtonGroup languageGroup = new ButtonGroup();
-        enLanguageItem = new JRadioButtonMenuItem("English");
-        enLanguageItem.addActionListener(e -> I18nManager.getInstance().setLocale(AppLocale.ENGLISH));
-        jaLanguageItem = new JRadioButtonMenuItem("日本語");
-        jaLanguageItem.addActionListener(e -> I18nManager.getInstance().setLocale(AppLocale.JAPANESE));
-        systemLanguageItem = new JRadioButtonMenuItem("System Default");
-        systemLanguageItem.addActionListener(e -> I18nManager.getInstance().setLocale(AppLocale.SYSTEM));
-
-        languageGroup.add(enLanguageItem);
-        languageGroup.add(jaLanguageItem);
-        languageGroup.add(systemLanguageItem);
-        languageSubMenu.add(enLanguageItem);
-        languageSubMenu.add(jaLanguageItem);
-        languageSubMenu.add(systemLanguageItem);
-
-        miniPlayerItem = new JMenuItem();
-        miniPlayerItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_M, KeyEvent.CTRL_DOWN_MASK));
-        miniPlayerItem.addActionListener(e -> switchToMiniPlayer());
-
-        viewMenu.add(themeSubMenu);
-        viewMenu.add(languageSubMenu);
-        viewMenu.addSeparator();
-        viewMenu.add(miniPlayerItem);
-        menuBar.add(viewMenu);
-
-        // Controls Menu
-        controlsMenu = new JMenu();
-        playItem = new JMenuItem();
-        playItem.addActionListener(e -> {
+        // 8. Initialize Menu Bar
+        appMenuBar = new AppMenuBar();
+        appMenuBar.setOnAddFileAction(this::chooseFileAndImport);
+        appMenuBar.setOnAddFolderAction(this::chooseFolderAndImport);
+        appMenuBar.setOnRescanLibraryAction(this::rescanLibrary);
+        appMenuBar.setOnRescanMissingAction(this::rescanAndRelinkMissing);
+        appMenuBar.setOnExitAction(() -> {
+            if (audioPlayer != null) {
+                audioPlayer.stop();
+            }
+            dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING));
+        });
+        appMenuBar.setOnEditTagsAction(this::openTagEditorForSelection);
+        appMenuBar.setOnMiniPlayerAction(this::switchToMiniPlayer);
+        appMenuBar.setOnPlayAction(() -> {
             Track selected = trackTablePanel.getSelectedTrack();
             if (selected != null && playerController.getAudioPlayer().getState() == PlaybackState.STOPPED) {
                 playTrackSafely(selected);
@@ -409,52 +387,16 @@ public class MainFrame extends JFrame {
                 playerController.play();
             }
         });
+        appMenuBar.setOnPauseAction(playerController::pause);
+        appMenuBar.setOnNextAction(playerController::next);
+        appMenuBar.setOnPrevAction(playerController::previous);
+        appMenuBar.setOnShuffleAction(playerController::setShuffle);
+        appMenuBar.setOnRepeatModeAction(playerController::setRepeatMode);
+        appMenuBar.setOnSwitchAccountAction(this::showAccountManagerDialog);
 
-        pauseItem = new JMenuItem();
-        pauseItem.addActionListener(e -> playerController.pause());
+        setJMenuBar(appMenuBar);
 
-        nextItem = new JMenuItem();
-        nextItem.addActionListener(e -> playerController.next());
-
-        prevItem = new JMenuItem();
-        prevItem.addActionListener(e -> playerController.previous());
-
-        shuffleMenuItem = new JCheckBoxMenuItem();
-        shuffleMenuItem.addActionListener(e -> playerController.setShuffle(shuffleMenuItem.isSelected()));
-
-        repeatSubMenu = new JMenu();
-        ButtonGroup repeatGroup = new ButtonGroup();
-        repeatOffItem = new JRadioButtonMenuItem();
-        repeatOffItem.addActionListener(e -> playerController.setRepeatMode(RepeatMode.OFF));
-        repeatAllItem = new JRadioButtonMenuItem();
-        repeatAllItem.addActionListener(e -> playerController.setRepeatMode(RepeatMode.ALL));
-        repeatOneItem = new JRadioButtonMenuItem();
-        repeatOneItem.addActionListener(e -> playerController.setRepeatMode(RepeatMode.ONE));
-
-        repeatGroup.add(repeatOffItem);
-        repeatGroup.add(repeatAllItem);
-        repeatGroup.add(repeatOneItem);
-        repeatSubMenu.add(repeatOffItem);
-        repeatSubMenu.add(repeatAllItem);
-        repeatSubMenu.add(repeatOneItem);
-
-        controlsMenu.add(playItem);
-        controlsMenu.add(pauseItem);
-        controlsMenu.addSeparator();
-        controlsMenu.add(nextItem);
-        controlsMenu.add(prevItem);
-        controlsMenu.addSeparator();
-        controlsMenu.add(shuffleMenuItem);
-        controlsMenu.add(repeatSubMenu);
-        menuBar.add(controlsMenu);
-
-        // Help Menu
-        helpMenu = new JMenu();
-        menuBar.add(helpMenu);
-
-        setJMenuBar(menuBar);
-
-        // 5. Register Listeners for i18n, Theme & Queue
+        // 9. Register Listeners for i18n, Theme & Queue
         this.playerController.addQueueListener(new QueueChangeListener() {
             @Override
             public void onRepeatModeChanged(RepeatMode mode) {
@@ -463,17 +405,30 @@ public class MainFrame extends JFrame {
 
             @Override
             public void onShuffleChanged(boolean shuffle) {
-                shuffleMenuItem.setSelected(shuffle);
+                appMenuBar.setShuffleSelected(shuffle);
             }
         });
         updateRepeatMenuSelection(this.playerController.getRepeatMode());
-        shuffleMenuItem.setSelected(this.playerController.isShuffle());
+        appMenuBar.setShuffleSelected(this.playerController.isShuffle());
 
         languageListener = newLocale -> updateLanguage();
         I18nManager.getInstance().addLanguageChangeListener(languageListener);
 
         themeListener = newTheme -> updateThemeSelection();
         ThemeManager.getInstance().addThemeChangeListener(themeListener);
+
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                if (audioPlayer != null) {
+                    try {
+                        audioPlayer.stop();
+                    } catch (Exception ex) {
+                        LOGGER.log(System.Logger.Level.WARNING, "Error stopping audio on window closing: " + ex.getMessage(), ex);
+                    }
+                }
+            }
+        });
 
         // 6. Global Keyboard Shortcuts
         shortcutManager = new KeyboardShortcutManager(getRootPane());
@@ -485,6 +440,7 @@ public class MainFrame extends JFrame {
         updateLanguage();
         updateThemeSelection();
         updateLanguageSelection();
+        refreshPlaylistsWithFolders();
         refreshLibraryView();
     }
 
@@ -529,7 +485,7 @@ public class MainFrame extends JFrame {
         shortcutManager.setOnMiniPlayerToggle(this::switchToMiniPlayer);
 
         shortcutManager.setOnAddFiles(() -> {
-            addFileItem.doClick();
+            appMenuBar.getAddFileItem().doClick();
         });
 
         shortcutManager.setOnEditTags(this::openTagEditorForSelection);
@@ -737,6 +693,119 @@ public class MainFrame extends JFrame {
         }
     }
 
+    /**
+     * Opens folder picker dialog and begins full rescan and metadata update for library.
+     */
+    public void rescanLibrary() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setDialogTitle(I18nManager.getInstance().get("dialog.rescan.title"));
+
+        Path defaultPath = getDefaultMusicFolderPath();
+        if (defaultPath != null && Files.isDirectory(defaultPath)) {
+            chooser.setSelectedFile(defaultPath.toFile());
+        }
+
+        int result = chooser.showOpenDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION && chooser.getSelectedFile() != null) {
+            rescanFolder(chooser.getSelectedFile().toPath());
+        }
+    }
+
+    private Path getDefaultMusicFolderPath() {
+        for (Track t : library.getTracks()) {
+            if (t.getFilePath() != null && !t.getFilePath().isBlank()) {
+                try {
+                    Path p = Paths.get(t.getFilePath()).getParent();
+                    if (p != null && Files.isDirectory(p)) {
+                        return p;
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Launches asynchronous folder rescan with forced metadata update, progress dialog,
+     * and status bar coordination.
+     *
+     * @param folderPath path to folder to rescan
+     */
+    public void rescanFolder(Path folderPath) {
+        if (folderPath == null) {
+            return;
+        }
+
+        ImportProgressDialog dialog = new ImportProgressDialog(this);
+
+        var task = importService.rescanAndImportAsync(folderPath, new ImportProgressListener() {
+            @Override
+            public void onProgress(int processedCount, int totalCount, String currentFileName) {
+                dialog.updateProgress(processedCount, totalCount, currentFileName);
+                if (currentFileName != null && !currentFileName.isBlank()) {
+                    statusBarPanel.setStatus(I18nManager.getInstance().format("status.scanning", currentFileName));
+                }
+                if (totalCount > 0) {
+                    statusBarPanel.showProgress(false, processedCount, totalCount);
+                }
+            }
+
+            @Override
+            public void onBatchImported(List<Track> importedBatch) {
+                trackTablePanel.addTracks(importedBatch);
+                if (searchIndex != null) {
+                    searchIndex.indexTracks(importedBatch);
+                }
+                if (searchController != null && searchController.hasActiveFilter()) {
+                    searchController.applyFilter();
+                }
+                updateStatusBarSummary();
+            }
+
+            @Override
+            public void onCompleted(ImportResult result) {
+                dialog.dispose();
+                statusBarPanel.hideProgress();
+                refreshLibraryView();
+                if (result != null) {
+                    statusBarPanel.setStatus(I18nManager.getInstance().format(
+                            "toast.rescan_detail",
+                            result.updatedCount(),
+                            result.addedCount()
+                    ));
+                } else {
+                    statusBarPanel.setStatus(I18nManager.getInstance().get("status.ready"));
+                }
+            }
+
+            @Override
+            public void onCompleted(int totalImportedCount) {
+                onCompleted(new ImportResult(0, totalImportedCount, 0));
+            }
+
+            @Override
+            public void onCancelled(int partialImportedCount) {
+                dialog.dispose();
+                statusBarPanel.hideProgress();
+                refreshLibraryView();
+                statusBarPanel.setStatus(I18nManager.getInstance().get("status.ready"));
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                dialog.dispose();
+                statusBarPanel.hideProgress();
+                statusBarPanel.setStatus(I18nManager.getInstance().format("common.error", error.getMessage()));
+            }
+        });
+
+        dialog.setOnCancel(task::cancel);
+        dialog.setOnBackground(() -> statusBarPanel.showProgress(true, 0, 100));
+
+        dialog.setVisible(true);
+    }
+
     private void setupDragAndDrop() {
         // Drop on Track Table: import to library
         new TrackDropTargetListener(trackTablePanel, (paths, dropPoint) -> {
@@ -921,25 +990,56 @@ public class MainFrame extends JFrame {
     }
 
     /**
-     * Navigates to album grid view displaying all library albums.
+     * Navigates to album grid view displaying all library albums, resetting scroll position.
      */
     public void showAlbumGrid() {
+        showAlbumGrid(false);
+    }
+
+    /**
+     * Navigates to album grid view displaying all library albums, optionally restoring scroll position.
+     *
+     * @param restoreScroll true to restore the previous scroll position and selected album
+     */
+    public void showAlbumGrid(boolean restoreScroll) {
         isAlbumGridActive = true;
         if (albumHeaderPanel != null) {
             albumHeaderPanel.setVisible(false);
         }
         if (albumGridViewPanel != null) {
             List<Album> albums = getOrComputeAlbums();
-            albumGridViewPanel.setAlbums(albums);
-            String currentQuery = controlBarPanel.getSearchField().getText();
-            if (currentQuery != null && !currentQuery.isBlank()) {
-                albumGridViewPanel.filterAlbums(currentQuery);
+            String currentQuery = (controlBarPanel != null && controlBarPanel.getSearchField() != null)
+                    ? controlBarPanel.getSearchField().getText() : null;
+
+            if (restoreScroll) {
+                // If albums have not changed, avoid re-rendering to achieve instant response and preserve scroll
+                if (!albums.equals(albumGridViewPanel.getAllAlbums())) {
+                    albumGridViewPanel.setAlbums(albums, true);
+                    if (currentQuery != null && !currentQuery.isBlank()) {
+                        albumGridViewPanel.filterAlbums(currentQuery);
+                    }
+                }
+            } else {
+                albumGridViewPanel.setAlbums(albums, false);
+                if (currentQuery != null && !currentQuery.isBlank()) {
+                    albumGridViewPanel.filterAlbums(currentQuery);
+                }
             }
         }
         if (cardLayout != null && mainContentPanel != null) {
             cardLayout.show(mainContentPanel, CARD_ALBUMS);
         }
+        if (restoreScroll && albumGridViewPanel != null) {
+            albumGridViewPanel.restoreScrollPosition();
+        }
         updateStatusBarSummary();
+    }
+
+    /**
+     * Navigates back to album grid view from album detail, preserving scroll position.
+     */
+    public void returnFromAlbumDetail() {
+        showAlbumGrid(true);
     }
 
     /**
@@ -950,6 +1050,9 @@ public class MainFrame extends JFrame {
     public void openAlbumDetail(Album album) {
         if (album == null) {
             return;
+        }
+        if (albumGridViewPanel != null) {
+            albumGridViewPanel.saveScrollPosition(album);
         }
         isAlbumGridActive = false;
         if (albumHeaderPanel != null) {
@@ -993,39 +1096,11 @@ public class MainFrame extends JFrame {
      * Updates all localized texts across the window, menus, and sub-panels.
      */
     public void updateLanguage() {
-        I18nManager i18n = I18nManager.getInstance();
+        updateTitle();
 
-        setTitle(i18n.get("app.name"));
-
-        fileMenu.setText(i18n.get("menu.file"));
-        addFileItem.setText(i18n.get("menu.file.add_file"));
-        addFolderItem.setText(i18n.get("menu.file.add_folder"));
-        rescanItem.setText(i18n.get("menu.file.rescan_missing"));
-        exitItem.setText(i18n.get("menu.file.exit"));
-
-        editMenu.setText(i18n.get("menu.edit"));
-        editTagsItem.setText(i18n.get("menu.edit.edit_tags"));
-
-        viewMenu.setText(i18n.get("menu.view"));
-        themeSubMenu.setText(i18n.get("menu.view.theme"));
-        darkThemeItem.setText(i18n.get("menu.view.theme.dark"));
-        lightThemeItem.setText(i18n.get("menu.view.theme.light"));
-        systemThemeItem.setText(i18n.get("menu.view.theme.system"));
-        languageSubMenu.setText(i18n.get("menu.view.language"));
-        miniPlayerItem.setText(i18n.get("menu.view.mini_player"));
-
-        controlsMenu.setText(i18n.get("menu.controls"));
-        playItem.setText(i18n.get("menu.controls.play"));
-        pauseItem.setText(i18n.get("menu.controls.pause"));
-        nextItem.setText(i18n.get("menu.controls.next"));
-        prevItem.setText(i18n.get("menu.controls.previous"));
-        shuffleMenuItem.setText(i18n.get("menu.controls.shuffle"));
-        repeatSubMenu.setText(i18n.get("menu.controls.repeat"));
-        repeatOffItem.setText(i18n.get("menu.controls.repeat_off"));
-        repeatAllItem.setText(i18n.get("menu.controls.repeat_all"));
-        repeatOneItem.setText(i18n.get("menu.controls.repeat_one"));
-
-        helpMenu.setText(i18n.get("menu.help"));
+        if (appMenuBar != null) {
+            appMenuBar.updateLanguage();
+        }
 
         // Propagate to panels
         controlBarPanel.updateLanguage();
@@ -1043,39 +1118,30 @@ public class MainFrame extends JFrame {
     }
 
     private void updateRepeatMenuSelection(RepeatMode mode) {
-        if (mode == RepeatMode.ALL) {
-            repeatAllItem.setSelected(true);
-        } else if (mode == RepeatMode.ONE) {
-            repeatOneItem.setSelected(true);
-        } else {
-            repeatOffItem.setSelected(true);
+        if (appMenuBar != null) {
+            appMenuBar.updateRepeatMode(mode);
         }
     }
 
     private void updateThemeSelection() {
-        AppTheme current = ThemeManager.getInstance().getCurrentTheme();
-        if (current == AppTheme.DARK) {
-            darkThemeItem.setSelected(true);
-        } else if (current == AppTheme.LIGHT) {
-            lightThemeItem.setSelected(true);
-        } else {
-            systemThemeItem.setSelected(true);
+        if (appMenuBar != null) {
+            appMenuBar.updateThemeSelection();
         }
     }
 
     private void updateLanguageSelection() {
-        AppLocale current = I18nManager.getInstance().getCurrentLocale();
-        if (current == AppLocale.ENGLISH) {
-            enLanguageItem.setSelected(true);
-        } else if (current == AppLocale.JAPANESE) {
-            jaLanguageItem.setSelected(true);
-        } else {
-            systemLanguageItem.setSelected(true);
+        if (appMenuBar != null) {
+            appMenuBar.updateLanguageSelection();
         }
     }
 
     @Override
     public void dispose() {
+        try {
+            SettingsManager.getInstance().saveFrom(this);
+        } catch (Exception ex) {
+            LOGGER.log(System.Logger.Level.WARNING, "Failed to save settings on dispose: " + ex.getMessage(), ex);
+        }
         if (folderWatcherService != null) {
             folderWatcherService.stop();
         }
@@ -1152,28 +1218,32 @@ public class MainFrame extends JFrame {
         return shortcutManager;
     }
 
+    public AppMenuBar getAppMenuBar() {
+        return appMenuBar;
+    }
+
     public JMenu getControlsMenu() {
-        return controlsMenu;
+        return appMenuBar != null ? appMenuBar.getControlsMenu() : null;
     }
 
     public JCheckBoxMenuItem getShuffleMenuItem() {
-        return shuffleMenuItem;
+        return appMenuBar != null ? appMenuBar.getShuffleMenuItem() : null;
     }
 
     public JMenu getRepeatSubMenu() {
-        return repeatSubMenu;
+        return appMenuBar != null ? appMenuBar.getRepeatSubMenu() : null;
     }
 
     public JRadioButtonMenuItem getRepeatOffItem() {
-        return repeatOffItem;
+        return appMenuBar != null ? appMenuBar.getRepeatOffItem() : null;
     }
 
     public JRadioButtonMenuItem getRepeatAllItem() {
-        return repeatAllItem;
+        return appMenuBar != null ? appMenuBar.getRepeatAllItem() : null;
     }
 
     public JRadioButtonMenuItem getRepeatOneItem() {
-        return repeatOneItem;
+        return appMenuBar != null ? appMenuBar.getRepeatOneItem() : null;
     }
 
     public FastSearchIndex getSearchIndex() {
@@ -1193,7 +1263,7 @@ public class MainFrame extends JFrame {
     }
 
     public JMenuItem getEditTagsItem() {
-        return editTagsItem;
+        return appMenuBar != null ? appMenuBar.getEditTagsItem() : null;
     }
 
     public AlbumGridViewPanel getAlbumGridViewPanel() {
@@ -1214,5 +1284,202 @@ public class MainFrame extends JFrame {
 
     public CardLayout getCardLayout() {
         return cardLayout;
+    }
+
+    public JMenuItem getRescanLibraryItem() {
+        return appMenuBar != null ? appMenuBar.getRescanLibraryItem() : null;
+    }
+
+    // ==========================================
+    // Account & Folder Management Integration
+    // ==========================================
+
+    private void updateTitle() {
+        I18nManager i18n = I18nManager.getInstance();
+        String appName = i18n.get("app.name");
+        if (currentAccount != null && currentAccount.getName() != null && !currentAccount.getName().isBlank()
+                && !Account.DEFAULT_ACCOUNT_ID.equals(currentAccount.getId())) {
+            setTitle(appName + " - [" + currentAccount.getName() + "]");
+        } else {
+            setTitle(appName);
+        }
+    }
+
+    private void showNewPlaylistFolderDialog() {
+        NewPlaylistFolderDialog dialog = new NewPlaylistFolderDialog(this, folderName -> {
+            if (folderName != null && !folderName.isBlank()) {
+                ensureDbRepositories();
+                if (folderRepository != null && currentAccount != null) {
+                    try {
+                        PlaylistFolder folder = new PlaylistFolder.Builder()
+                                .name(folderName)
+                                .accountId(currentAccount.getId())
+                                .build();
+                        folderRepository.save(folder);
+                        refreshPlaylistsWithFolders();
+                    } catch (Exception e) {
+                        LOGGER.log(System.Logger.Level.ERROR, "Failed to save playlist folder: " + e.getMessage(), e);
+                    }
+                }
+            }
+        });
+        dialog.setVisible(true);
+    }
+
+    public void refreshPlaylistsWithFolders() {
+        Map<String, String> folderMap = loadFolderNamesMap();
+        sidebarPanel.setPlaylists(library.getPlaylists(), folderMap);
+    }
+
+    private Map<String, String> loadFolderNamesMap() {
+        Map<String, String> map = new HashMap<>();
+        ensureDbRepositories();
+        if (folderRepository != null && currentAccount != null) {
+            try {
+                List<PlaylistFolder> folders = folderRepository.findByAccountId(currentAccount.getId());
+                for (PlaylistFolder f : folders) {
+                    map.put(f.getId(), f.getName());
+                }
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.WARNING, "Failed to load playlist folders: " + e.getMessage(), e);
+            }
+        }
+        return map;
+    }
+
+    public void showAccountManagerDialog() {
+        ensureDbRepositories();
+        if (accountRepository == null) {
+            JOptionPane.showMessageDialog(this,
+                    I18nManager.getText("dialog.account.no_db", "Account management requires an active database."),
+                    I18nManager.getText("dialog.account.title", "Account Manager"),
+                    JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        AccountManagerDialog dialog = new AccountManagerDialog(
+                this,
+                accountRepository,
+                currentAccount != null ? currentAccount.getId() : Account.DEFAULT_ACCOUNT_ID,
+                this::switchAccount
+        );
+        dialog.setVisible(true);
+    }
+
+    public void switchAccount(Account targetAccount) {
+        if (targetAccount == null || (currentAccount != null && Objects.equals(currentAccount.getId(), targetAccount.getId()))) {
+            return;
+        }
+
+        // 1. Stop active playback
+        if (playerController != null) {
+            playerController.stop();
+        }
+
+        // 2. Persist current library data
+        if (storage != null) {
+            try {
+                storage.save(this.library, this.storagePath);
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.WARNING, "Failed to persist library on account switch: " + e.getMessage(), e);
+            }
+        }
+
+        // 3. Switch account and re-instantiate storage
+        this.currentAccount = targetAccount;
+        if (dbManager != null) {
+            this.storage = new SqliteLibraryStorage(dbManager, targetAccount.getId());
+            if (libraryController != null) {
+                libraryController.setStorage(this.storage);
+            }
+        }
+
+        // 4. Load target account library
+        Library loadedLibrary;
+        if (this.storage != null) {
+            try {
+                loadedLibrary = this.storage.load(this.storagePath);
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.WARNING, "Failed to load target account library: " + e.getMessage(), e);
+                loadedLibrary = new Library();
+            }
+        } else {
+            loadedLibrary = new Library();
+        }
+
+        // 5. Update library domain model
+        this.library.clear();
+        this.library.addTracks(loadedLibrary.getTracks());
+        for (Playlist p : loadedLibrary.getPlaylists()) {
+            this.library.addPlaylist(p);
+        }
+
+        // 6. Refresh search index
+        this.searchIndex.clear();
+        this.searchIndex.indexTracks(this.library.getTracks());
+
+        // 7. Update UI views
+        refreshPlaylistsWithFolders();
+        this.sidebarPanel.selectSection(SidebarPanel.LibrarySection.ALL_SONGS);
+        this.trackTablePanel.setTracks(new ArrayList<>(this.library.getTracks()));
+        updateTitle();
+        updateStatusBarSummary();
+    }
+
+    private void ensureDbRepositories() {
+        if (dbManager == null) {
+            try {
+                dbManager = new DatabaseManager(Main.getDatabasePath());
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.ERROR, "Could not create database manager: " + e.getMessage(), e);
+                return;
+            }
+        }
+        if (accountRepository == null && dbManager != null) {
+            try {
+                accountRepository = new SqliteAccountRepository(dbManager);
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.ERROR, "Could not create account repository: " + e.getMessage(), e);
+            }
+        }
+        if (folderRepository == null && dbManager != null) {
+            try {
+                folderRepository = new SqlitePlaylistFolderRepository(dbManager);
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.ERROR, "Could not create folder repository: " + e.getMessage(), e);
+            }
+        }
+    }
+
+    public Account getCurrentAccount() {
+        return currentAccount;
+    }
+
+    public void setCurrentAccount(Account currentAccount) {
+        this.currentAccount = currentAccount;
+        updateTitle();
+    }
+
+    public JMenu getAccountMenu() {
+        return appMenuBar != null ? appMenuBar.getAccountMenu() : null;
+    }
+
+    public JMenuItem getSwitchAccountItem() {
+        return appMenuBar != null ? appMenuBar.getSwitchAccountItem() : null;
+    }
+
+    public DatabaseManager getDbManager() {
+        return dbManager;
+    }
+
+    public LibraryStorage getStorage() {
+        return storage;
+    }
+
+    public SqlitePlaylistFolderRepository getFolderRepository() {
+        return folderRepository;
+    }
+
+    public SqliteAccountRepository getAccountRepository() {
+        return accountRepository;
     }
 }

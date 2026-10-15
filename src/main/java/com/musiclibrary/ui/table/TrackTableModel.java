@@ -4,6 +4,7 @@ import com.musiclibrary.i18n.I18nManager;
 import com.musiclibrary.model.Track;
 
 import javax.swing.table.AbstractTableModel;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -16,23 +17,37 @@ import java.util.Objects;
  */
 public class TrackTableModel extends AbstractTableModel {
 
-    public static final int COLUMN_INDEX_TRACK_NUMBER = 0;
-    public static final int COLUMN_INDEX_TITLE = 1;
-    public static final int COLUMN_INDEX_ARTIST = 2;
-    public static final int COLUMN_INDEX_ALBUM = 3;
-    public static final int COLUMN_INDEX_DURATION = 4;
-    public static final int COLUMN_INDEX_GENRE = 5;
-    public static final int COLUMN_INDEX_YEAR = 6;
-    public static final int COLUMN_INDEX_RATING = 7;
+    public static final int COLUMN_INDEX_STATUS = 0;
+    public static final int COLUMN_INDEX_TRACK_NUMBER = 1;
+    public static final int COLUMN_INDEX_TITLE = 2;
+    public static final int COLUMN_INDEX_ARTIST = 3;
+    public static final int COLUMN_INDEX_ALBUM_ARTIST = 4;
+    public static final int COLUMN_INDEX_ALBUM = 5;
+    public static final int COLUMN_INDEX_DURATION = 6;
+    public static final int COLUMN_INDEX_GENRE = 7;
+    public static final int COLUMN_INDEX_YEAR = 8;
+    public static final int COLUMN_INDEX_DISC_NUMBER = 9;
+    public static final int COLUMN_INDEX_BPM = 10;
+    public static final int COLUMN_INDEX_BITRATE = 11;
+    public static final int COLUMN_INDEX_DATE_ADDED = 12;
+    public static final int COLUMN_INDEX_PLAY_COUNT = 13;
+    public static final int COLUMN_INDEX_RATING = 14;
 
     public static final String[] COLUMN_KEYS = {
+            "table.column.status",
             "table.column.track_number",
             "table.column.title",
             "table.column.artist",
+            "table.column.album_artist",
             "table.column.album",
             "table.column.duration",
             "table.column.genre",
             "table.column.year",
+            "table.column.disc_number",
+            "table.column.bpm",
+            "table.column.bitrate",
+            "table.column.date_added",
+            "table.column.play_count",
             "table.column.rating"
     };
 
@@ -70,13 +85,20 @@ public class TrackTableModel extends AbstractTableModel {
     @Override
     public Class<?> getColumnClass(int columnIndex) {
         return switch (columnIndex) {
+            case COLUMN_INDEX_STATUS -> Object.class;
             case COLUMN_INDEX_TRACK_NUMBER -> Integer.class;
             case COLUMN_INDEX_TITLE -> String.class;
             case COLUMN_INDEX_ARTIST -> String.class;
+            case COLUMN_INDEX_ALBUM_ARTIST -> String.class;
             case COLUMN_INDEX_ALBUM -> String.class;
             case COLUMN_INDEX_DURATION -> Long.class;
             case COLUMN_INDEX_GENRE -> String.class;
             case COLUMN_INDEX_YEAR -> Integer.class;
+            case COLUMN_INDEX_DISC_NUMBER -> Integer.class;
+            case COLUMN_INDEX_BPM -> Integer.class;
+            case COLUMN_INDEX_BITRATE -> Integer.class;
+            case COLUMN_INDEX_DATE_ADDED -> Instant.class;
+            case COLUMN_INDEX_PLAY_COUNT -> Integer.class;
             case COLUMN_INDEX_RATING -> Integer.class;
             default -> Object.class;
         };
@@ -93,13 +115,20 @@ public class TrackTableModel extends AbstractTableModel {
         }
 
         return switch (columnIndex) {
+            case COLUMN_INDEX_STATUS -> "";
             case COLUMN_INDEX_TRACK_NUMBER -> track.getTrackNumber();
             case COLUMN_INDEX_TITLE -> track.getTitle();
             case COLUMN_INDEX_ARTIST -> track.getArtist();
+            case COLUMN_INDEX_ALBUM_ARTIST -> track.getAlbumArtist();
             case COLUMN_INDEX_ALBUM -> track.getAlbum();
             case COLUMN_INDEX_DURATION -> track.getDurationSeconds();
             case COLUMN_INDEX_GENRE -> track.getGenre();
             case COLUMN_INDEX_YEAR -> track.getYear();
+            case COLUMN_INDEX_DISC_NUMBER -> track.getDiscNumber();
+            case COLUMN_INDEX_BPM -> track.getBpm();
+            case COLUMN_INDEX_BITRATE -> track.getBitrate();
+            case COLUMN_INDEX_DATE_ADDED -> track.getDateAdded();
+            case COLUMN_INDEX_PLAY_COUNT -> track.getPlayCount();
             case COLUMN_INDEX_RATING -> track.getRating();
             default -> null;
         };

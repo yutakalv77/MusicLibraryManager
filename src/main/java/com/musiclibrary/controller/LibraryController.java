@@ -44,7 +44,7 @@ public class LibraryController {
     private final Library library;
     private final SidebarPanel sidebarPanel;
     private final TrackTablePanel trackTablePanel;
-    private final LibraryStorage storage;
+    private volatile LibraryStorage storage;
     private final Path storagePath;
     private final FastSearchIndex searchIndex;
     private final MissingTrackResolver missingTrackResolver;
@@ -716,5 +716,13 @@ public class LibraryController {
 
     public TagWriter getTagWriter() {
         return tagWriter;
+    }
+
+    public LibraryStorage getStorage() {
+        return storage;
+    }
+
+    public void setStorage(LibraryStorage storage) {
+        this.storage = storage;
     }
 }

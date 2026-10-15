@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -222,6 +224,37 @@ class SidebarPanelTest {
         java.util.function.BiConsumer<Playlist, List<String>> callback = (pl, ids) -> {};
         panel.setOnTracksDroppedOnPlaylistAction(callback);
         assertThat(panel.getOnTracksDroppedOnPlaylistAction()).isSameAs(callback);
+    }
+
+    @Test
+    @DisplayName("Folder display and new folder action wiring operate properly in SidebarPanel")
+    void testFolderDisplayAndActions() {
+        SidebarPanel panel = new SidebarPanel();
+
+        Playlist p1 = new Playlist("p-fold-1", "Workout Tracks");
+        p1.setFolderId("f-gym");
+
+        Playlist p2 = new Playlist("p-fold-2", "Chill Beats");
+        p2.setFolderId(null);
+
+        panel.setPlaylists(List.of(p1, p2), Map.of("f-gym", "Fitness"));
+
+        assertThat(panel.getPlaylistList().getModel().getElementAt(0)).isEqualTo("📁  Fitness / 🎵 Workout Tracks");
+        assertThat(panel.getPlaylistList().getModel().getElementAt(1)).isEqualTo("📁  Chill Beats");
+
+        // Action wiring
+        AtomicBoolean actionInvoked = new AtomicBoolean(false);
+        panel.setOnNewPlaylistFolderAction(() -> actionInvoked.set(true));
+        assertThat(panel.getOnNewPlaylistFolderAction()).isNotNull();
+
+        // Trigger via button
+        panel.getNewFolderButton().doClick();
+        assertThat(actionInvoked.get()).isTrue();
+
+        // Trigger via context menu item
+        actionInvoked.set(false);
+        panel.getNewFolderMenuItem().doClick();
+        assertThat(actionInvoked.get()).isTrue();
     }
 }
 

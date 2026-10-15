@@ -51,21 +51,26 @@ public class SidebarPanel extends JPanel {
     private final List<Playlist> currentPlaylists;
 
     private final JButton newPlaylistButton;
+    private final JButton newFolderButton;
 
     // Context Menu for Playlists
     private final JPopupMenu playlistContextMenu;
     private final JMenuItem playPlaylistItem;
     private final JMenuItem renamePlaylistItem;
     private final JMenuItem deletePlaylistItem;
+    private final JMenuItem newFolderMenuItem;
 
     // Action Callbacks
     private Consumer<Playlist> onPlaylistPlayAction;
     private Consumer<Playlist> onPlaylistRenameAction;
     private Consumer<Playlist> onPlaylistDeleteAction;
     private Runnable onNewPlaylistAction;
+    private Runnable onNewPlaylistFolderAction;
     private Consumer<LibrarySection> onSectionSelectedAction;
     private Consumer<Playlist> onPlaylistSelectedAction;
     private BiConsumer<Playlist, List<String>> onTracksDroppedOnPlaylistAction;
+
+    private java.util.Map<String, String> folderNames = new java.util.HashMap<>();
 
     public SidebarPanel() {
         setLayout(new BorderLayout());
@@ -115,8 +120,8 @@ public class SidebarPanel extends JPanel {
 
         add(contentPanel, BorderLayout.CENTER);
 
-        // 3. Bottom: New Playlist Button
-        JPanel bottomPanel = new JPanel(new BorderLayout());
+        // 3. Bottom: New Playlist & New Folder Buttons
+        JPanel bottomPanel = new JPanel(new java.awt.GridLayout(1, 2, 4, 0));
         bottomPanel.setBorder(BorderFactory.createEmptyBorder(6, 2, 2, 2));
 
         newPlaylistButton = new JButton();
@@ -126,7 +131,16 @@ public class SidebarPanel extends JPanel {
                 onNewPlaylistAction.run();
             }
         });
-        bottomPanel.add(newPlaylistButton, BorderLayout.CENTER);
+        bottomPanel.add(newPlaylistButton);
+
+        newFolderButton = new JButton();
+        newFolderButton.setPreferredSize(new Dimension(0, 32));
+        newFolderButton.addActionListener(e -> {
+            if (onNewPlaylistFolderAction != null) {
+                onNewPlaylistFolderAction.run();
+            }
+        });
+        bottomPanel.add(newFolderButton);
 
         add(bottomPanel, BorderLayout.SOUTH);
 
@@ -135,6 +149,7 @@ public class SidebarPanel extends JPanel {
         playPlaylistItem = new JMenuItem();
         renamePlaylistItem = new JMenuItem();
         deletePlaylistItem = new JMenuItem();
+        newFolderMenuItem = new JMenuItem();
 
         playPlaylistItem.addActionListener(e -> {
             Playlist p = getSelectedPlaylist();
@@ -154,11 +169,18 @@ public class SidebarPanel extends JPanel {
                 onPlaylistDeleteAction.accept(p);
             }
         });
+        newFolderMenuItem.addActionListener(e -> {
+            if (onNewPlaylistFolderAction != null) {
+                onNewPlaylistFolderAction.run();
+            }
+        });
 
         playlistContextMenu.add(playPlaylistItem);
         playlistContextMenu.addSeparator();
         playlistContextMenu.add(renamePlaylistItem);
         playlistContextMenu.add(deletePlaylistItem);
+        playlistContextMenu.addSeparator();
+        playlistContextMenu.add(newFolderMenuItem);
 
         playlistList.addMouseListener(new MouseAdapter() {
             @Override
@@ -243,10 +265,12 @@ public class SidebarPanel extends JPanel {
         libraryHeaderLabel.setText(i18n.get("sidebar.library"));
         playlistsHeaderLabel.setText(i18n.get("sidebar.playlists"));
         newPlaylistButton.setText("+ " + i18n.get("sidebar.new_playlist"));
+        newFolderButton.setText("+ " + i18n.get("sidebar.new_folder", "New Folder"));
 
         playPlaylistItem.setText(i18n.get("sidebar.playlist.play"));
         renamePlaylistItem.setText(i18n.get("sidebar.playlist.rename"));
         deletePlaylistItem.setText(i18n.get("sidebar.playlist.delete"));
+        newFolderMenuItem.setText(i18n.get("sidebar.new_folder", "New Folder"));
 
         int selectedLibIndex = libraryList.getSelectedIndex();
         libraryListModel.clear();
@@ -269,13 +293,29 @@ public class SidebarPanel extends JPanel {
      * @param playlists list of playlists
      */
     public void setPlaylists(List<Playlist> playlists) {
+        setPlaylists(playlists, java.util.Collections.emptyMap());
+    }
+
+    /**
+     * Updates the displayed playlist names in the playlist list with folder grouping.
+     *
+     * @param playlists list of playlists
+     * @param folderNames map of folder ID to folder name
+     */
+    public void setPlaylists(List<Playlist> playlists, java.util.Map<String, String> folderNames) {
         this.currentPlaylists.clear();
         this.playlistListModel.clear();
+        this.folderNames = folderNames != null ? new java.util.HashMap<>(folderNames) : new java.util.HashMap<>();
 
         if (playlists != null) {
             this.currentPlaylists.addAll(playlists);
             for (Playlist playlist : playlists) {
-                this.playlistListModel.addElement("📁  " + playlist.getName());
+                String folderName = playlist.getFolderId() != null ? this.folderNames.get(playlist.getFolderId()) : null;
+                if (folderName != null && !folderName.isBlank()) {
+                    this.playlistListModel.addElement("📁  " + folderName + " / 🎵 " + playlist.getName());
+                } else {
+                    this.playlistListModel.addElement("📁  " + playlist.getName());
+                }
             }
         }
     }
@@ -292,6 +332,10 @@ public class SidebarPanel extends JPanel {
 
     public JButton getNewPlaylistButton() {
         return newPlaylistButton;
+    }
+
+    public JButton getNewFolderButton() {
+        return newFolderButton;
     }
 
     public List<Playlist> getCurrentPlaylists() {
@@ -358,6 +402,10 @@ public class SidebarPanel extends JPanel {
         return deletePlaylistItem;
     }
 
+    public JMenuItem getNewFolderMenuItem() {
+        return newFolderMenuItem;
+    }
+
     // --- Action Callback Setters ---
 
     public void setOnPlaylistPlayAction(Consumer<Playlist> onPlaylistPlayAction) {
@@ -374,6 +422,14 @@ public class SidebarPanel extends JPanel {
 
     public void setOnNewPlaylistAction(Runnable onNewPlaylistAction) {
         this.onNewPlaylistAction = onNewPlaylistAction;
+    }
+
+    public void setOnNewPlaylistFolderAction(Runnable onNewPlaylistFolderAction) {
+        this.onNewPlaylistFolderAction = onNewPlaylistFolderAction;
+    }
+
+    public Runnable getOnNewPlaylistFolderAction() {
+        return onNewPlaylistFolderAction;
     }
 
     public void setOnSectionSelectedAction(Consumer<LibrarySection> onSectionSelectedAction) {

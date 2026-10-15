@@ -631,6 +631,158 @@ class TrackTest {
         assertThat(emptyBuilt.hasArtwork()).isFalse();
     }
 
+    @Test
+    @DisplayName("New fields (albumArtist, discNumber, bpm, bitrate) work with Builder, Getters, Setters, and toBuilder")
+    void testNewFieldsGetterSetterAndBuilder() {
+        Track track = Track.builder()
+                .filePath("C:/Music/test.mp3")
+                .title("Song 1")
+                .albumArtist("Various Artists")
+                .discNumber(2)
+                .bpm(128)
+                .bitrate(320)
+                .build();
+
+        assertThat(track.getAlbumArtist()).isEqualTo("Various Artists");
+        assertThat(track.getDiscNumber()).isEqualTo(2);
+        assertThat(track.getBpm()).isEqualTo(128);
+        assertThat(track.getBitrate()).isEqualTo(320);
+
+        // Test setters
+        track.setAlbumArtist("Solo Artist");
+        track.setDiscNumber(1);
+        track.setBpm(140);
+        track.setBitrate(256);
+
+        assertThat(track.getAlbumArtist()).isEqualTo("Solo Artist");
+        assertThat(track.getDiscNumber()).isEqualTo(1);
+        assertThat(track.getBpm()).isEqualTo(140);
+        assertThat(track.getBitrate()).isEqualTo(256);
+
+        // Test toBuilder
+        Track copied = track.toBuilder().build();
+        assertThat(copied.getAlbumArtist()).isEqualTo("Solo Artist");
+        assertThat(copied.getDiscNumber()).isEqualTo(1);
+        assertThat(copied.getBpm()).isEqualTo(140);
+        assertThat(copied.getBitrate()).isEqualTo(256);
+    }
+
+    @Test
+    @DisplayName("Boundary and clamping: discNumber, bpm, bitrate clamp negative values to 0; albumArtist normalizes null to empty")
+    void testNewFieldsBoundaryAndClamping() {
+        Track track = Track.builder()
+                .filePath("C:/Music/test.mp3")
+                .albumArtist(null)
+                .discNumber(-5)
+                .bpm(-120)
+                .bitrate(-320)
+                .build();
+
+        assertThat(track.getAlbumArtist()).isEqualTo("");
+        assertThat(track.getDiscNumber()).isEqualTo(0);
+        assertThat(track.getBpm()).isEqualTo(0);
+        assertThat(track.getBitrate()).isEqualTo(0);
+
+        // Test setters with negative values
+        track.setAlbumArtist(null);
+        track.setDiscNumber(-1);
+        track.setBpm(-99);
+        track.setBitrate(-128);
+
+        assertThat(track.getAlbumArtist()).isEqualTo("");
+        assertThat(track.getDiscNumber()).isEqualTo(0);
+        assertThat(track.getBpm()).isEqualTo(0);
+        assertThat(track.getBitrate()).isEqualTo(0);
+
+        // Test boundary values 0 and large values
+        track.setDiscNumber(0);
+        track.setBpm(0);
+        track.setBitrate(0);
+        assertThat(track.getDiscNumber()).isEqualTo(0);
+        assertThat(track.getBpm()).isEqualTo(0);
+        assertThat(track.getBitrate()).isEqualTo(0);
+
+        track.setDiscNumber(99);
+        track.setBpm(999);
+        track.setBitrate(1411);
+        assertThat(track.getDiscNumber()).isEqualTo(99);
+        assertThat(track.getBpm()).isEqualTo(999);
+        assertThat(track.getBitrate()).isEqualTo(1411);
+    }
+
+    @Test
+    @DisplayName("Gson backward compatibility: Legacy JSON without new fields deserializes with default safe values")
+    void testLegacyJsonDeserializationBackwardCompatibility() {
+        Gson gson = new GsonBuilder()
+                .registerTypeAdapter(Instant.class, new com.google.gson.TypeAdapter<Instant>() {
+                    @Override
+                    public void write(com.google.gson.stream.JsonWriter out, Instant value) throws java.io.IOException {
+                        if (value == null) {
+                            out.nullValue();
+                        } else {
+                            out.value(value.toString());
+                        }
+                    }
+
+                    @Override
+                    public Instant read(com.google.gson.stream.JsonReader in) throws java.io.IOException {
+                        return Instant.parse(in.nextString());
+                    }
+                })
+                .create();
+
+        // Legacy JSON without albumArtist, discNumber, bpm, bitrate
+        String legacyJson = "{\n" +
+                "  \"id\": \"legacy-uuid-1234\",\n" +
+                "  \"filePath\": \"C:/Music/legacy.mp3\",\n" +
+                "  \"title\": \"Legacy Title\",\n" +
+                "  \"artist\": \"Legacy Artist\",\n" +
+                "  \"album\": \"Legacy Album\",\n" +
+                "  \"genre\": \"Classical\",\n" +
+                "  \"year\": 2018,\n" +
+                "  \"trackNumber\": 5,\n" +
+                "  \"durationSeconds\": 240,\n" +
+                "  \"fileSizeBytes\": 5000000,\n" +
+                "  \"rating\": 4,\n" +
+                "  \"playCount\": 12,\n" +
+                "  \"dateAdded\": \"2023-01-15T10:00:00Z\",\n" +
+                "  \"lastModified\": \"2023-01-15T10:00:00Z\"\n" +
+                "}";
+
+        Track deserialized = gson.fromJson(legacyJson, Track.class);
+
+        assertThat(deserialized.getId()).isEqualTo("legacy-uuid-1234");
+        assertThat(deserialized.getFilePath()).isEqualTo("C:/Music/legacy.mp3");
+        assertThat(deserialized.getTitle()).isEqualTo("Legacy Title");
+        assertThat(deserialized.getArtist()).isEqualTo("Legacy Artist");
+        assertThat(deserialized.getAlbum()).isEqualTo("Legacy Album");
+        assertThat(deserialized.getGenre()).isEqualTo("Classical");
+        assertThat(deserialized.getYear()).isEqualTo(2018);
+        assertThat(deserialized.getTrackNumber()).isEqualTo(5);
+        assertThat(deserialized.getDurationSeconds()).isEqualTo(240L);
+        assertThat(deserialized.getFileSizeBytes()).isEqualTo(5000000L);
+        assertThat(deserialized.getRating()).isEqualTo(4);
+        assertThat(deserialized.getPlayCount()).isEqualTo(12);
+
+        // Assert new fields have safe default values
+        assertThat(deserialized.getAlbumArtist()).isIn("", null); // Gson might leave null if not initialized or "" if no-args ctor runs
+        assertThat(deserialized.getDiscNumber()).isEqualTo(0);
+        assertThat(deserialized.getBpm()).isEqualTo(0);
+        assertThat(deserialized.getBitrate()).isEqualTo(0);
+
+        // Verify toBuilder and mutating operations work without NPE
+        Track modified = deserialized.toBuilder()
+                .albumArtist("New Album Artist")
+                .discNumber(1)
+                .bpm(120)
+                .bitrate(320)
+                .build();
+        assertThat(modified.getAlbumArtist()).isEqualTo("New Album Artist");
+        assertThat(modified.getDiscNumber()).isEqualTo(1);
+        assertThat(modified.getBpm()).isEqualTo(120);
+        assertThat(modified.getBitrate()).isEqualTo(320);
+    }
+
     private static byte[] createMp3WithApic(byte[] imageBytes) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
@@ -664,6 +816,54 @@ class TrackTest {
         baos.write(frame);
 
         return baos.toByteArray();
+    }
+
+    @Test
+    @DisplayName("accountTrackId property, getter, setter, builder, and toBuilder support")
+    void testAccountTrackId() {
+        // 1. Default constructor defaults to null
+        Track defaultTrack = new Track();
+        assertThat(defaultTrack.getAccountTrackId()).isNull();
+
+        // 2. Builder with accountTrackId
+        Track track = Track.builder()
+                .filePath("C:/Music/test.mp3")
+                .accountTrackId("acc-tr-1234")
+                .build();
+        assertThat(track.getAccountTrackId()).isEqualTo("acc-tr-1234");
+
+        // 3. Setter update
+        track.setAccountTrackId("acc-tr-5678");
+        assertThat(track.getAccountTrackId()).isEqualTo("acc-tr-5678");
+
+        // 4. toBuilder deep copy & mutation
+        Track copy = track.toBuilder().build();
+        assertThat(copy.getAccountTrackId()).isEqualTo("acc-tr-5678");
+
+        Track copyCleared = track.toBuilder().accountTrackId(null).build();
+        assertThat(copyCleared.getAccountTrackId()).isNull();
+    }
+
+    @Test
+    @DisplayName("accountTrackId does not affect Track equality or hashCode which strictly depends on track id")
+    void testAccountTrackIdDoesNotAffectEqualsOrHashCode() {
+        String sameId = java.util.UUID.randomUUID().toString();
+        Track t1 = Track.builder()
+                .id(sameId)
+                .filePath("C:/Music/test.mp3")
+                .accountTrackId("entry-1")
+                .title("Song A")
+                .build();
+
+        Track t2 = Track.builder()
+                .id(sameId)
+                .filePath("C:/Music/test.mp3")
+                .accountTrackId("entry-2") // Different accountTrackId
+                .title("Song B")
+                .build();
+
+        assertThat(t1).isEqualTo(t2);
+        assertThat(t1.hashCode()).isEqualTo(t2.hashCode());
     }
 
     private static byte[] encodeSynchsafe(int value) {

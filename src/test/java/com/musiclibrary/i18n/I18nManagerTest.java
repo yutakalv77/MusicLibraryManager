@@ -358,8 +358,11 @@ class I18nManagerTest {
         assertThat(jaKeys).as("Japanese keys match English keys").containsExactlyInAnyOrderElementsOf(enKeys);
         assertThat(defaultKeys).as("Default keys match English keys").containsExactlyInAnyOrderElementsOf(enKeys);
 
-        // Verify non-empty values
+        // Verify non-empty values (table.column.status is intentionally empty for headerless column)
         for (String key : enKeys) {
+            if ("table.column.status".equals(key)) {
+                continue;
+            }
             String enVal = enProps.getProperty(key);
             String jaVal = jaProps.getProperty(key);
             String defVal = defaultProps.getProperty(key);

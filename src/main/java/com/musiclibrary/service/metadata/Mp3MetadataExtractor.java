@@ -56,10 +56,14 @@ public class Mp3MetadataExtractor implements MetadataExtractor {
 
         String title = "";
         String artist = "";
+        String albumArtist = "";
         String album = "";
         String genre = "";
         int year = 0;
         int trackNumber = 0;
+        int discNumber = 0;
+        int bpm = 0;
+        int bitrate = 0;
         long durationSeconds = 0;
         boolean hasArtwork = false;
 
@@ -68,12 +72,14 @@ public class Mp3MetadataExtractor implements MetadataExtractor {
         try {
             Mp3File mp3File = new Mp3File(filePath.toFile(), DEFAULT_BUFFER_LENGTH, false);
             durationSeconds = Math.max(0, mp3File.getLengthInSeconds());
+            bitrate = Math.max(0, mp3File.getBitrate());
 
             // 1. Check ID3v2 tag first (higher fidelity)
             if (mp3File.hasId3v2Tag()) {
                 ID3v2 id3v2 = mp3File.getId3v2Tag();
                 title = cleanString(id3v2.getTitle());
                 artist = cleanString(id3v2.getArtist());
+                albumArtist = cleanString(id3v2.getAlbumArtist());
                 album = cleanString(id3v2.getAlbum());
                 genre = cleanString(id3v2.getGenreDescription());
                 if (genre.isEmpty() && id3v2.getGenre() >= 0) {
@@ -81,6 +87,8 @@ public class Mp3MetadataExtractor implements MetadataExtractor {
                 }
                 year = parseYear(id3v2.getYear());
                 trackNumber = parseTrackNumber(id3v2.getTrack());
+                discNumber = parseDiscNumber(id3v2.getPartOfSet());
+                bpm = Math.max(0, id3v2.getBPM());
                 
                 // Check if artwork frame is present without loading/holding large binary in memory
                 if (id3v2.getFrameSets() != null &&
@@ -167,16 +175,38 @@ public class Mp3MetadataExtractor implements MetadataExtractor {
                 .filePath(absolutePath)
                 .title(title)
                 .artist(artist)
+                .albumArtist(albumArtist)
                 .album(album)
                 .genre(genre)
                 .year(year)
                 .trackNumber(trackNumber)
+                .discNumber(discNumber)
+                .bpm(bpm)
+                .bitrate(bitrate)
                 .durationSeconds(durationSeconds)
                 .fileSizeBytes(fileSize)
                 .hasArtwork(hasArtwork)
                 .dateAdded(Instant.now())
                 .lastModified(lastModified)
                 .build();
+    }
+
+    /* package-private for testing */
+    static int parseDiscNumber(String partOfSet) {
+        if (partOfSet == null || partOfSet.isBlank()) {
+            return 0;
+        }
+        String clean = partOfSet.trim();
+        int slashIndex = clean.indexOf('/');
+        if (slashIndex > 0) {
+            clean = clean.substring(0, slashIndex).trim();
+        }
+        try {
+            int num = Integer.parseInt(clean);
+            return Math.max(0, num);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     private static String cleanString(String input) {

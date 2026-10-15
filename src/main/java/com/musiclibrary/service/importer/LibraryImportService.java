@@ -179,10 +179,46 @@ public class LibraryImportService {
      * @return ImportTask handle supporting cancellation and completion Future
      */
     public ImportTask scanAndImportAsync(Path rootPath, ImportProgressListener listener) {
+        return scanAndImportAsync(rootPath, false, listener);
+    }
+
+    /**
+     * Asynchronously scans the specified folder or file with optional forced metadata re-extraction.
+     *
+     * @param rootPath             directory or audio file path to import
+     * @param forceMetadataRefresh true to re-extract metadata even if file modification time is unchanged
+     * @param listener             progress reporting listener
+     * @return ImportTask handle supporting cancellation and completion Future
+     */
+    public ImportTask scanAndImportAsync(Path rootPath, boolean forceMetadataRefresh, ImportProgressListener listener) {
         if (rootPath == null) {
-            return scanAndImportAsync(java.util.Collections.emptyList(), listener);
+            return scanAndImportAsync(java.util.Collections.emptyList(), forceMetadataRefresh, listener);
         }
-        return scanAndImportAsync(List.of(rootPath), listener);
+        return scanAndImportAsync(List.of(rootPath), forceMetadataRefresh, listener);
+    }
+
+    /**
+     * Rescans existing tracks and imports any new tracks in the specified folder or file,
+     * unconditionally re-extracting audio metadata (BPM, bitrate, album artist, disc number, etc.).
+     *
+     * @param rootPath directory or audio file path to rescan
+     * @param listener progress reporting listener
+     * @return ImportTask handle supporting cancellation and completion Future
+     */
+    public ImportTask rescanAndImportAsync(Path rootPath, ImportProgressListener listener) {
+        return scanAndImportAsync(rootPath, true, listener);
+    }
+
+    /**
+     * Rescans existing tracks and imports any new tracks in multiple paths,
+     * unconditionally re-extracting audio metadata (BPM, bitrate, album artist, disc number, etc.).
+     *
+     * @param paths    collection of directories or audio files to rescan
+     * @param listener progress reporting listener
+     * @return ImportTask handle supporting cancellation and completion Future
+     */
+    public ImportTask rescanAndImportAsync(java.util.Collection<Path> paths, ImportProgressListener listener) {
+        return scanAndImportAsync(paths, true, listener);
     }
 
     /**
@@ -193,6 +229,18 @@ public class LibraryImportService {
      * @return ImportTask handle supporting cancellation and completion Future
      */
     public ImportTask scanAndImportAsync(java.util.Collection<Path> paths, ImportProgressListener listener) {
+        return scanAndImportAsync(paths, false, listener);
+    }
+
+    /**
+     * Asynchronously scans multiple files or directories with optional forced metadata re-extraction.
+     *
+     * @param paths                collection of directories or audio files
+     * @param forceMetadataRefresh true to re-extract metadata even if file modification time is unchanged
+     * @param listener             progress reporting listener
+     * @return ImportTask handle supporting cancellation and completion Future
+     */
+    public ImportTask scanAndImportAsync(java.util.Collection<Path> paths, boolean forceMetadataRefresh, ImportProgressListener listener) {
         ImportTask task = new ImportTask();
 
         executorService.submit(() -> {
@@ -280,11 +328,11 @@ public class LibraryImportService {
                             WorkItem item;
                             if (existing != null) {
                                 Instant existingModified = existing.getLastModified();
-                                if (existingModified != null && !fileModified.isAfter(existingModified)) {
+                                if (!forceMetadataRefresh && existingModified != null && !fileModified.isAfter(existingModified)) {
                                     // File is unmodified -> skip immediately without metadata extraction
                                     item = new WorkItem(audioFile, pathKey, fileModified, WorkItemStatus.SKIP);
                                 } else {
-                                    // Existing file has been updated -> extract metadata
+                                    // Existing file has been updated or forced refresh -> extract metadata
                                     item = new WorkItem(audioFile, pathKey, fileModified, WorkItemStatus.EXTRACT_FOR_UPDATE);
                                     item.extractionFuture = CompletableFuture.supplyAsync(() -> {
                                         if (task.isCancelled()) {

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -376,7 +377,23 @@ class PlaylistTest {
     @Test
     @DisplayName("Gson serialization and deserialization works seamlessly")
     void testGsonSerialization() {
-        Gson gson = new GsonBuilder().create();
+        Gson gson = new GsonBuilder()
+                .registerTypeAdapter(java.time.Instant.class, new com.google.gson.TypeAdapter<java.time.Instant>() {
+                    @Override
+                    public void write(com.google.gson.stream.JsonWriter out, java.time.Instant value) throws java.io.IOException {
+                        if (value == null) {
+                            out.nullValue();
+                        } else {
+                            out.value(value.toString());
+                        }
+                    }
+
+                    @Override
+                    public java.time.Instant read(com.google.gson.stream.JsonReader in) throws java.io.IOException {
+                        return java.time.Instant.parse(in.nextString());
+                    }
+                })
+                .create();
         Playlist playlist = new Playlist("p-id-1", "Workout Hits", List.of("t10", "t20"));
 
         String json = gson.toJson(playlist);
@@ -384,7 +401,146 @@ class PlaylistTest {
 
         assertThat(deserialized.getId()).isEqualTo(playlist.getId());
         assertThat(deserialized.getName()).isEqualTo(playlist.getName());
+        assertThat(deserialized.getAccountId()).isEqualTo(Account.DEFAULT_ACCOUNT_ID);
+        assertThat(deserialized.getFolderId()).isNull();
+        assertThat(deserialized.getPosition()).isEqualTo(0);
         assertThat(deserialized.getTrackIds()).containsExactly("t10", "t20");
         assertThat(deserialized.getTrackCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("Builder and full arguments constructor support accountId, folderId, position, and timestamps")
+    void testBuilderAndFullArgsConstructor() {
+        java.time.Instant now = java.time.Instant.now();
+        Playlist playlist = Playlist.builder()
+                .id("custom-pl-1")
+                .name("Driving Songs")
+                .accountId("acc-42")
+                .folderId("folder-7")
+                .position(5)
+                .trackIds(List.of("tr-1", "tr-2"))
+                .createdAt(now)
+                .updatedAt(now)
+                .build();
+
+        assertThat(playlist.getId()).isEqualTo("custom-pl-1");
+        assertThat(playlist.getName()).isEqualTo("Driving Songs");
+        assertThat(playlist.getAccountId()).isEqualTo("acc-42");
+        assertThat(playlist.getFolderId()).isEqualTo("folder-7");
+        assertThat(playlist.getPosition()).isEqualTo(5);
+        assertThat(playlist.getTrackIds()).containsExactly("tr-1", "tr-2");
+        assertThat(playlist.getCreatedAt()).isEqualTo(now);
+        assertThat(playlist.getUpdatedAt()).isEqualTo(now);
+
+        Playlist modified = playlist.toBuilder()
+                .name("Chill Driving")
+                .position(6)
+                .build();
+
+        assertThat(modified.getName()).isEqualTo("Chill Driving");
+        assertThat(modified.getPosition()).isEqualTo(6);
+        assertThat(modified).isEqualTo(playlist);
+    }
+
+    @Test
+    @DisplayName("Default constructors initialize accountId to default, folderId to null, and position to 0")
+    void testNewPropertiesDefaultValues() {
+        Playlist defaultPlaylist = new Playlist();
+        assertThat(defaultPlaylist.getAccountId()).isEqualTo(Account.DEFAULT_ACCOUNT_ID);
+        assertThat(defaultPlaylist.getFolderId()).isNull();
+        assertThat(defaultPlaylist.getPosition()).isEqualTo(0);
+        assertThat(defaultPlaylist.getCreatedAt()).isNotNull();
+        assertThat(defaultPlaylist.getUpdatedAt()).isNotNull();
+
+        Playlist namedPlaylist = new Playlist("My Jams");
+        assertThat(namedPlaylist.getAccountId()).isEqualTo(Account.DEFAULT_ACCOUNT_ID);
+        assertThat(namedPlaylist.getFolderId()).isNull();
+        assertThat(namedPlaylist.getPosition()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("Setters for new properties safely handle null, blanks, and negative clamping")
+    void testNewPropertiesSettersValidationAndClamping() {
+        Playlist playlist = new Playlist("Test Playlist");
+
+        // accountId null/blank fallback
+        playlist.setAccountId("acc-custom");
+        assertThat(playlist.getAccountId()).isEqualTo("acc-custom");
+        playlist.setAccountId(null);
+        assertThat(playlist.getAccountId()).isEqualTo(Account.DEFAULT_ACCOUNT_ID);
+        playlist.setAccountId("   ");
+        assertThat(playlist.getAccountId()).isEqualTo(Account.DEFAULT_ACCOUNT_ID);
+
+        // folderId null/blank normalization
+        playlist.setFolderId("folder-1");
+        assertThat(playlist.getFolderId()).isEqualTo("folder-1");
+        playlist.setFolderId(null);
+        assertThat(playlist.getFolderId()).isNull();
+        playlist.setFolderId("   ");
+        assertThat(playlist.getFolderId()).isNull();
+
+        // position negative clamping
+        playlist.setPosition(5);
+        assertThat(playlist.getPosition()).isEqualTo(5);
+        playlist.setPosition(-1);
+        assertThat(playlist.getPosition()).isEqualTo(0);
+        playlist.setPosition(-99);
+        assertThat(playlist.getPosition()).isEqualTo(0);
+
+        // timestamps null fallback
+        playlist.setCreatedAt(null);
+        assertThat(playlist.getCreatedAt()).isNotNull();
+        playlist.setUpdatedAt(null);
+        assertThat(playlist.getUpdatedAt()).isNotNull();
+
+        // name null/blank fallback
+        playlist.setName(null);
+        assertThat(playlist.getName()).isEqualTo("Untitled Playlist");
+        playlist.setName("   ");
+        assertThat(playlist.getName()).isEqualTo("Untitled Playlist");
+    }
+
+    @Test
+    @DisplayName("Track mutation operations (add, remove, reorder, clear) preserve new properties")
+    void testTrackOperationsPreserveNewProperties() {
+        Instant created = Instant.parse("2026-10-15T01:00:00Z");
+        Instant updated = Instant.parse("2026-10-15T02:00:00Z");
+
+        Playlist playlist = Playlist.builder()
+                .name("Rock List")
+                .accountId("acc-rock")
+                .folderId("folder-genres")
+                .position(4)
+                .trackIds(List.of("t1", "t2", "t3"))
+                .createdAt(created)
+                .updatedAt(updated)
+                .build();
+
+        // 1. addTrack
+        playlist.addTrack("t4");
+        assertThat(playlist.getTrackCount()).isEqualTo(4);
+        assertThat(playlist.getAccountId()).isEqualTo("acc-rock");
+        assertThat(playlist.getFolderId()).isEqualTo("folder-genres");
+        assertThat(playlist.getPosition()).isEqualTo(4);
+
+        // 2. reorder
+        playlist.reorder(0, 3);
+        assertThat(playlist.getTrackIds()).containsExactly("t2", "t3", "t4", "t1");
+        assertThat(playlist.getAccountId()).isEqualTo("acc-rock");
+        assertThat(playlist.getFolderId()).isEqualTo("folder-genres");
+        assertThat(playlist.getPosition()).isEqualTo(4);
+
+        // 3. removeTrack
+        playlist.removeTrack("t2");
+        assertThat(playlist.getTrackCount()).isEqualTo(3);
+        assertThat(playlist.getAccountId()).isEqualTo("acc-rock");
+        assertThat(playlist.getFolderId()).isEqualTo("folder-genres");
+
+        // 4. clear
+        playlist.clear();
+        assertThat(playlist.getTrackCount()).isEqualTo(0);
+        assertThat(playlist.getAccountId()).isEqualTo("acc-rock");
+        assertThat(playlist.getFolderId()).isEqualTo("folder-genres");
+        assertThat(playlist.getPosition()).isEqualTo(4);
     }
 }

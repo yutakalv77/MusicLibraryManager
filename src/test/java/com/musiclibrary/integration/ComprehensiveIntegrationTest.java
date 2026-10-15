@@ -269,9 +269,11 @@ class ComprehensiveIntegrationTest {
 
         // SearchController execute query via text field
         searchField.setText("Whiteberry");
+        searchController.applyFilter();
         assertThat(tablePanel.getTable().getRowCount()).isEqualTo(1);
 
         searchController.clearSearch();
+        searchController.applyFilter();
         assertThat(tablePanel.getTable().getRowCount()).isEqualTo(3);
 
         // -------------------------------------------------------------

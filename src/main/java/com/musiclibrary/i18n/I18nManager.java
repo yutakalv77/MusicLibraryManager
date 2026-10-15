@@ -154,6 +154,45 @@ public class I18nManager {
     }
 
     /**
+     * Retrieves the localized message for the specified key with a fallback defaultValue.
+     *
+     * @param key message key
+     * @param defaultValue default value if key is not found
+     * @return localized message or defaultValue
+     */
+    public String get(String key, String defaultValue) {
+        if (key == null) {
+            return defaultValue != null ? defaultValue : "";
+        }
+        try {
+            return bundle.getString(key);
+        } catch (MissingResourceException e) {
+            return defaultValue != null ? defaultValue : "!" + key + "!";
+        }
+    }
+
+    /**
+     * Static convenience helper to get localized text using the global I18nManager singleton.
+     *
+     * @param key message key
+     * @return localized message
+     */
+    public static String getText(String key) {
+        return getInstance().get(key);
+    }
+
+    /**
+     * Static convenience helper to get localized text with a fallback default value using the global I18nManager singleton.
+     *
+     * @param key message key
+     * @param defaultValue default value if not found
+     * @return localized message or defaultValue
+     */
+    public static String getText(String key, String defaultValue) {
+        return getInstance().get(key, defaultValue);
+    }
+
+    /**
      * Retrieves the localized message and formats it with the specified arguments.
      *
      * @param key  message key

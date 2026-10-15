@@ -16,18 +16,24 @@ public class Track {
     private String filePath;
     private String title;
     private String artist;
+    private String albumArtist;
     private String album;
     private String genre;
     private int year;
     private int trackNumber;
+    private int discNumber;
+    private int bpm;
+    private int bitrate;
     private long durationSeconds;
     private long fileSizeBytes;
     private int rating;
     private int playCount;
     private Instant dateAdded;
     private Instant lastModified;
+    private Instant lastPlayedAt;
     private byte[] artworkData;
     private boolean hasArtwork;
+    private String accountTrackId;
     private transient boolean missing = false;
 
     /**
@@ -35,38 +41,50 @@ public class Track {
      */
     public Track() {
         this.id = UUID.randomUUID().toString();
+        this.accountTrackId = null;
         this.filePath = "";
         this.title = "";
         this.artist = "";
+        this.albumArtist = "";
         this.album = "";
         this.genre = "";
         this.year = 0;
         this.trackNumber = 0;
+        this.discNumber = 0;
+        this.bpm = 0;
+        this.bitrate = 0;
         this.durationSeconds = 0;
         this.fileSizeBytes = 0;
         this.rating = 0;
         this.playCount = 0;
         this.dateAdded = Instant.now();
         this.lastModified = Instant.EPOCH;
+        this.lastPlayedAt = null;
         this.artworkData = null;
         this.hasArtwork = false;
     }
 
     private Track(Builder builder) {
         this.id = builder.id != null && !builder.id.isBlank() ? builder.id : UUID.randomUUID().toString();
+        this.accountTrackId = builder.accountTrackId;
         setFilePath(builder.filePath);
         this.title = builder.title != null ? builder.title : "";
         this.artist = builder.artist != null ? builder.artist : "";
+        this.albumArtist = builder.albumArtist != null ? builder.albumArtist : "";
         this.album = builder.album != null ? builder.album : "";
         this.genre = builder.genre != null ? builder.genre : "";
         setYear(builder.year);
         setTrackNumber(builder.trackNumber);
+        setDiscNumber(builder.discNumber);
+        setBpm(builder.bpm);
+        setBitrate(builder.bitrate);
         setDurationSeconds(builder.durationSeconds);
         setFileSizeBytes(builder.fileSizeBytes);
         setRating(builder.rating);
         setPlayCount(builder.playCount);
         this.dateAdded = builder.dateAdded != null ? builder.dateAdded : Instant.now();
         this.lastModified = builder.lastModified != null ? builder.lastModified : Instant.EPOCH;
+        this.lastPlayedAt = builder.lastPlayedAt;
         if (builder.artworkData != null && builder.artworkData.length > 0) {
             setArtworkData(builder.artworkData);
         } else {
@@ -82,24 +100,54 @@ public class Track {
     public Builder toBuilder() {
         return new Builder()
                 .id(this.id)
+                .accountTrackId(this.accountTrackId)
                 .filePath(this.filePath)
                 .title(this.title)
                 .artist(this.artist)
+                .albumArtist(this.albumArtist)
                 .album(this.album)
                 .genre(this.genre)
                 .year(this.year)
                 .trackNumber(this.trackNumber)
+                .discNumber(this.discNumber)
+                .bpm(this.bpm)
+                .bitrate(this.bitrate)
                 .durationSeconds(this.durationSeconds)
                 .fileSizeBytes(this.fileSizeBytes)
                 .rating(this.rating)
                 .playCount(this.playCount)
                 .dateAdded(this.dateAdded)
                 .lastModified(this.lastModified)
+                .lastPlayedAt(this.lastPlayedAt)
                 .hasArtwork(this.hasArtwork())
                 .artworkData(this.artworkData);
     }
 
     // --- Getters & Setters ---
+
+    public Instant getLastPlayed() {
+        return lastPlayedAt;
+    }
+
+    public Instant getLastPlayedAt() {
+        return lastPlayedAt;
+    }
+
+    public void setLastPlayed(Instant lastPlayed) {
+        this.lastPlayedAt = lastPlayed;
+    }
+
+    public void setLastPlayedAt(Instant lastPlayedAt) {
+        this.lastPlayedAt = lastPlayedAt;
+    }
+
+    public String getAccountTrackId() {
+        return accountTrackId;
+    }
+
+    public void setAccountTrackId(String accountTrackId) {
+        this.accountTrackId = accountTrackId;
+    }
 
     public String getId() {
         return id;
@@ -139,6 +187,14 @@ public class Track {
         this.artist = artist != null ? artist : "";
     }
 
+    public String getAlbumArtist() {
+        return albumArtist;
+    }
+
+    public void setAlbumArtist(String albumArtist) {
+        this.albumArtist = albumArtist != null ? albumArtist : "";
+    }
+
     public String getAlbum() {
         return album;
     }
@@ -175,6 +231,30 @@ public class Track {
             throw new IllegalArgumentException("Track number cannot be negative: " + trackNumber);
         }
         this.trackNumber = trackNumber;
+    }
+
+    public int getDiscNumber() {
+        return discNumber;
+    }
+
+    public void setDiscNumber(int discNumber) {
+        this.discNumber = Math.max(0, discNumber);
+    }
+
+    public int getBpm() {
+        return bpm;
+    }
+
+    public void setBpm(int bpm) {
+        this.bpm = Math.max(0, bpm);
+    }
+
+    public int getBitrate() {
+        return bitrate;
+    }
+
+    public void setBitrate(int bitrate) {
+        this.bitrate = Math.max(0, bitrate);
     }
 
     public long getDurationSeconds() {
@@ -334,10 +414,14 @@ public class Track {
                 ", filePath='" + filePath + '\'' +
                 ", title='" + title + '\'' +
                 ", artist='" + artist + '\'' +
+                ", albumArtist='" + albumArtist + '\'' +
                 ", album='" + album + '\'' +
                 ", genre='" + genre + '\'' +
                 ", year=" + year +
                 ", trackNumber=" + trackNumber +
+                ", discNumber=" + discNumber +
+                ", bpm=" + bpm +
+                ", bitrate=" + bitrate +
                 ", durationSeconds=" + durationSeconds +
                 ", fileSizeBytes=" + fileSizeBytes +
                 ", rating=" + rating +
@@ -353,24 +437,35 @@ public class Track {
 
     public static class Builder {
         private String id;
+        private String accountTrackId;
         private String filePath;
         private String title = "";
         private String artist = "";
+        private String albumArtist = "";
         private String album = "";
         private String genre = "";
         private int year = 0;
         private int trackNumber = 0;
+        private int discNumber = 0;
+        private int bpm = 0;
+        private int bitrate = 0;
         private long durationSeconds = 0;
         private long fileSizeBytes = 0;
         private int rating = 0;
         private int playCount = 0;
         private Instant dateAdded = Instant.now();
         private Instant lastModified = Instant.EPOCH;
+        private Instant lastPlayedAt;
         private byte[] artworkData;
         private boolean hasArtwork = false;
 
         public Builder id(String id) {
             this.id = id;
+            return this;
+        }
+
+        public Builder accountTrackId(String accountTrackId) {
+            this.accountTrackId = accountTrackId;
             return this;
         }
 
@@ -386,6 +481,11 @@ public class Track {
 
         public Builder artist(String artist) {
             this.artist = artist;
+            return this;
+        }
+
+        public Builder albumArtist(String albumArtist) {
+            this.albumArtist = albumArtist;
             return this;
         }
 
@@ -406,6 +506,21 @@ public class Track {
 
         public Builder trackNumber(int trackNumber) {
             this.trackNumber = trackNumber;
+            return this;
+        }
+
+        public Builder discNumber(int discNumber) {
+            this.discNumber = discNumber;
+            return this;
+        }
+
+        public Builder bpm(int bpm) {
+            this.bpm = bpm;
+            return this;
+        }
+
+        public Builder bitrate(int bitrate) {
+            this.bitrate = bitrate;
             return this;
         }
 
@@ -436,6 +551,16 @@ public class Track {
 
         public Builder lastModified(Instant lastModified) {
             this.lastModified = lastModified;
+            return this;
+        }
+
+        public Builder lastPlayed(Instant lastPlayed) {
+            this.lastPlayedAt = lastPlayed;
+            return this;
+        }
+
+        public Builder lastPlayedAt(Instant lastPlayedAt) {
+            this.lastPlayedAt = lastPlayedAt;
             return this;
         }
 

@@ -148,6 +148,10 @@ public class VolumeAudioDevice extends AudioDeviceBase {
     protected void closeImpl() {
         if (source != null) {
             try {
+                source.stop();
+                source.flush();
+            } catch (Exception ignored) {}
+            try {
                 source.close();
             } catch (Exception ignored) {}
             source = null;

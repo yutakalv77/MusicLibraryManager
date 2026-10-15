@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 
 import javax.swing.Action;
 import javax.swing.ActionMap;
+import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
@@ -66,6 +67,7 @@ class MainFrameTest {
             assertThat(frame.getMinimumSize()).isEqualTo(new Dimension(800, 520));
             assertThat(frame.getTitle()).isEqualTo("Music Library Manager");
             assertThat(frame.getJMenuBar()).isNotNull();
+            assertThat(frame.getAppMenuBar()).isNotNull().isSameAs(frame.getJMenuBar());
             assertThat(frame.getAudioPlayer()).isNotNull();
             assertThat(frame.getPlayerController()).isNotNull();
             assertThat(frame.getSearchIndex()).isNotNull();
@@ -84,11 +86,11 @@ class MainFrameTest {
 
         try {
             JMenuBar menuBar = frame.getJMenuBar();
-            assertThat(menuBar.getMenuCount()).isEqualTo(5); // File, Edit, View, Controls, Help
+            assertThat(menuBar.getMenuCount()).isEqualTo(6); // File, Edit, View, Controls, Account, Help
 
             JMenu fileMenu = menuBar.getMenu(0);
             assertThat(fileMenu.getText()).isEqualTo("File");
-            assertThat(fileMenu.getItemCount()).isEqualTo(6); // Add File, Add Folder, Sep, Rescan, Sep, Exit
+            assertThat(fileMenu.getItemCount()).isEqualTo(7); // Add File, Add Folder, Rescan Library, Sep, Rescan Missing, Sep, Exit
 
             JMenu editMenu = menuBar.getMenu(1);
             assertThat(editMenu.getText()).isEqualTo("Edit");
@@ -104,7 +106,12 @@ class MainFrameTest {
             assertThat(frame.getRepeatSubMenu()).isNotNull();
             assertThat(frame.getRepeatSubMenu().getItemCount()).isEqualTo(3); // Off, All, One
 
-            JMenu helpMenu = menuBar.getMenu(4);
+            JMenu accountMenu = menuBar.getMenu(4);
+            assertThat(accountMenu.getText()).isEqualTo("Account");
+            assertThat(frame.getAccountMenu()).isNotNull();
+            assertThat(frame.getSwitchAccountItem()).isNotNull();
+
+            JMenu helpMenu = menuBar.getMenu(5);
             assertThat(helpMenu.getText()).isEqualTo("Help");
         } finally {
             frame.dispose();
@@ -126,15 +133,17 @@ class MainFrameTest {
             assertThat(menuBar.getMenu(1).getText()).isEqualTo("編集");
             assertThat(menuBar.getMenu(2).getText()).isEqualTo("表示");
             assertThat(menuBar.getMenu(3).getText()).isEqualTo("操作");
-            assertThat(menuBar.getMenu(4).getText()).isEqualTo("ヘルプ");
-            assertThat(menuBar.getMenu(0).getItem(3).getText()).isEqualTo("行方不明ファイルを再スキャン・再リンク...");
+            assertThat(menuBar.getMenu(4).getText()).isEqualTo("アカウント");
+            assertThat(menuBar.getMenu(5).getText()).isEqualTo("ヘルプ");
+            assertThat(menuBar.getMenu(0).getItem(2).getText()).isEqualTo("ライブラリを一括再スキャン...");
+            assertThat(menuBar.getMenu(0).getItem(4).getText()).isEqualTo("行方不明ファイルを再スキャン・再リンク...");
             assertThat(frame.getShuffleMenuItem().getText()).isEqualTo("シャッフル");
             assertThat(frame.getRepeatSubMenu().getText()).isEqualTo("リピート");
 
             // Child panel propagation
             assertThat(frame.getControlBarPanel().getPrevButton().getToolTipText()).isEqualTo("前の曲");
             assertThat(frame.getSidebarPanel().getNewPlaylistButton().getText()).contains("新規プレイリスト");
-            assertThat(frame.getTrackTablePanel().getTable().getColumnModel().getColumn(1).getHeaderValue()).isEqualTo("タイトル");
+            assertThat(frame.getTrackTablePanel().getTable().getColumnModel().getColumn(2).getHeaderValue()).isEqualTo("タイトル");
             assertThat(frame.getStatusBarPanel().getStatusLabel().getText()).isEqualTo("準備完了");
 
             // 2. Switch back to English
@@ -142,13 +151,14 @@ class MainFrameTest {
 
             assertThat(frame.getTitle()).isEqualTo("Music Library Manager");
             assertThat(menuBar.getMenu(0).getText()).isEqualTo("File");
-            assertThat(menuBar.getMenu(0).getItem(3).getText()).isEqualTo("Rescan & Relink Missing Files...");
+            assertThat(menuBar.getMenu(0).getItem(2).getText()).isEqualTo("Rescan Library...");
+            assertThat(menuBar.getMenu(0).getItem(4).getText()).isEqualTo("Rescan & Relink Missing Files...");
             assertThat(menuBar.getMenu(2).getText()).isEqualTo("View");
             assertThat(frame.getShuffleMenuItem().getText()).isEqualTo("Shuffle");
             assertThat(frame.getRepeatSubMenu().getText()).isEqualTo("Repeat");
             assertThat(frame.getControlBarPanel().getPrevButton().getToolTipText()).isEqualTo("Previous Track");
             assertThat(frame.getSidebarPanel().getNewPlaylistButton().getText()).contains("New Playlist");
-            assertThat(frame.getTrackTablePanel().getTable().getColumnModel().getColumn(1).getHeaderValue()).isEqualTo("Title");
+            assertThat(frame.getTrackTablePanel().getTable().getColumnModel().getColumn(2).getHeaderValue()).isEqualTo("Title");
             assertThat(frame.getStatusBarPanel().getStatusLabel().getText()).isEqualTo("Ready");
         } finally {
             frame.dispose();
@@ -1064,17 +1074,340 @@ class MainFrameTest {
         }
     }
 
+    @Test
+    @DisplayName("Rescan library menu item is configured with accelerator, localized text, and rescanFolder null safety")
+    void testRescanLibraryMenuItemConfiguration() {
+        MainFrame frame = new MainFrame();
+        try {
+            JMenuItem rescanItem = frame.getRescanLibraryItem();
+            assertThat(rescanItem).isNotNull();
+            assertThat(rescanItem.getText()).isEqualTo("Rescan Library...");
+            assertThat(rescanItem.getAccelerator()).isEqualTo(
+                    javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_R,
+                            java.awt.event.KeyEvent.CTRL_DOWN_MASK | java.awt.event.KeyEvent.SHIFT_DOWN_MASK)
+            );
+
+            // Localized text switch
+            I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+            frame.updateLanguage();
+            assertThat(rescanItem.getText()).isEqualTo("ライブラリを一括再スキャン...");
+
+            // Switch back
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+            frame.updateLanguage();
+            assertThat(rescanItem.getText()).isEqualTo("Rescan Library...");
+
+            // Null safety
+            assertThatCode(() -> frame.rescanFolder(null)).doesNotThrowAnyException();
+        } finally {
+            frame.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("File menu hierarchy places Rescan Library at exact index 2 with Ctrl+Shift+R accelerator")
+    void testFileMenuHierarchyAndRescanItemPosition() {
+        MainFrame frame = new MainFrame();
+        try {
+            JMenu fileMenu = frame.getJMenuBar().getMenu(0);
+            assertThat(fileMenu).isNotNull();
+            assertThat(fileMenu.getText()).isEqualTo("File");
+
+            // Index 0: Add File
+            JMenuItem addFile = fileMenu.getItem(0);
+            assertThat(addFile.getText()).isEqualTo("Add File...");
+            assertThat(addFile.getAccelerator()).isEqualTo(
+                    javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_O, java.awt.event.KeyEvent.CTRL_DOWN_MASK)
+            );
+
+            // Index 1: Add Folder
+            JMenuItem addFolder = fileMenu.getItem(1);
+            assertThat(addFolder.getText()).isEqualTo("Add Folder...");
+
+            // Index 2: Rescan Library (Ctrl+Shift+R)
+            JMenuItem rescanLib = fileMenu.getItem(2);
+            assertThat(rescanLib.getText()).isEqualTo("Rescan Library...");
+            assertThat(rescanLib.getAccelerator()).isEqualTo(
+                    javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_R,
+                            java.awt.event.KeyEvent.CTRL_DOWN_MASK | java.awt.event.KeyEvent.SHIFT_DOWN_MASK)
+            );
+            assertThat(rescanLib).isSameAs(frame.getRescanLibraryItem());
+
+            // Index 4: Rescan Missing Tracks
+            JMenuItem rescanMissing = fileMenu.getItem(4);
+            assertThat(rescanMissing.getText()).isEqualTo("Rescan & Relink Missing Files...");
+
+            // Index 6: Exit
+            JMenuItem exit = fileMenu.getItem(6);
+            assertThat(exit.getText()).isEqualTo("Exit");
+        } finally {
+            frame.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("Rescan dialog and toast localization keys exist and format accurately in English and Japanese")
+    void testRescanLocalizationKeys() {
+        I18nManager i18n = I18nManager.getInstance();
+
+        // English
+        i18n.setLocale(AppLocale.ENGLISH);
+        assertThat(i18n.get("menu.file.rescan_library")).isEqualTo("Rescan Library...");
+        assertThat(i18n.get("dialog.rescan.title")).isEqualTo("Rescan & Update Library");
+        assertThat(i18n.format("toast.rescan_detail", 5, 2)).isEqualTo("5 tracks updated, 2 tracks added");
+
+        // Japanese
+        i18n.setLocale(AppLocale.JAPANESE);
+        assertThat(i18n.get("menu.file.rescan_library")).isEqualTo("ライブラリを一括再スキャン...");
+        assertThat(i18n.get("dialog.rescan.title")).isEqualTo("ライブラリの再スキャン・更新");
+        assertThat(i18n.format("toast.rescan_detail", 5, 2)).isEqualTo("5 曲を更新、2 曲を追加しました");
+
+        // Restore English
+        i18n.setLocale(AppLocale.ENGLISH);
+    }
+
+    @Test
+    @DisplayName("windowClosing event stops audioPlayer immediately")
+    void testWindowClosingStopsAudioImmediately() {
+        TrackingAudioPlayer trackingPlayer = new TrackingAudioPlayer();
+        trackingPlayer.play(Track.builder().id("1").title("Test").filePath("dummy.mp3").build());
+        assertThat(trackingPlayer.isPlaying()).isTrue();
+
+        MainFrame frame = new MainFrame(new Library(), null, trackingPlayer, null);
+        frame.setDefaultCloseOperation(javax.swing.WindowConstants.DO_NOTHING_ON_CLOSE);
+        try {
+            frame.dispatchEvent(new java.awt.event.WindowEvent(frame, java.awt.event.WindowEvent.WINDOW_CLOSING));
+            assertThat(trackingPlayer.isPlaying()).isFalse();
+            assertThat(trackingPlayer.stopCallCount).isGreaterThan(0);
+        } finally {
+            frame.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("Exit menu action stops audioPlayer immediately and dispatches windowClosing")
+    void testExitMenuActionStopsAudioImmediately() {
+        TrackingAudioPlayer trackingPlayer = new TrackingAudioPlayer();
+        trackingPlayer.play(Track.builder().id("1").title("Test").filePath("dummy.mp3").build());
+        assertThat(trackingPlayer.isPlaying()).isTrue();
+
+        MainFrame frame = new MainFrame(new Library(), null, trackingPlayer, null);
+        frame.setDefaultCloseOperation(javax.swing.WindowConstants.DO_NOTHING_ON_CLOSE);
+        try {
+            frame.getAppMenuBar().getExitItem().doClick();
+            assertThat(trackingPlayer.isPlaying()).isFalse();
+            assertThat(trackingPlayer.stopCallCount).isGreaterThan(0);
+        } finally {
+            frame.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("windowClosing and Exit menu action handle null audioPlayer safely without throwing")
+    void testWindowClosingWithNullAudioPlayerSafelyIgnored() {
+        // MainFrame with null audio player
+        MainFrame frame = new MainFrame(new Library(), null, null, null);
+        frame.setDefaultCloseOperation(javax.swing.WindowConstants.DO_NOTHING_ON_CLOSE);
+        try {
+            // WINDOW_CLOSING event with null player
+            assertThatCode(() -> frame.dispatchEvent(new java.awt.event.WindowEvent(frame, java.awt.event.WindowEvent.WINDOW_CLOSING)))
+                    .doesNotThrowAnyException();
+
+            // Exit menu item click with null player
+            assertThatCode(() -> frame.getAppMenuBar().getExitItem().doClick())
+                    .doesNotThrowAnyException();
+        } finally {
+            frame.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("windowClosing safely catches and logs exceptions thrown by audioPlayer.stop()")
+    void testWindowClosingHandlesAudioPlayerStopExceptionSafely() {
+        TrackingAudioPlayer throwingPlayer = new TrackingAudioPlayer() {
+            @Override
+            public void stop() {
+                super.stop();
+                throw new RuntimeException("Simulated audio stop failure");
+            }
+        };
+
+        MainFrame frame = new MainFrame(new Library(), null, throwingPlayer, null);
+        frame.setDefaultCloseOperation(javax.swing.WindowConstants.DO_NOTHING_ON_CLOSE);
+        try {
+            assertThatCode(() -> frame.dispatchEvent(new java.awt.event.WindowEvent(frame, java.awt.event.WindowEvent.WINDOW_CLOSING)))
+                    .doesNotThrowAnyException();
+            assertThat(throwingPlayer.stopCallCount).isGreaterThan(0);
+        } finally {
+            frame.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("MainFrame syncs audio player events with TrackTablePanel playback status indicator")
+    void testAudioPlayerSyncWithTrackTablePanel() {
+        TrackingAudioPlayer customPlayer = new TrackingAudioPlayer();
+        MainFrame frame = new MainFrame(new Library(), null, customPlayer, null);
+        try {
+            Track track = Track.builder().id("track-abc").title("Test Song").filePath("test.mp3").build();
+            frame.getTrackTablePanel().setTracks(List.of(track));
+
+            assertThat(frame.getTrackTablePanel().getCurrentPlayingTrackId()).isNull();
+            assertThat(frame.getTrackTablePanel().getCurrentPlaybackState()).isEqualTo(PlaybackState.STOPPED);
+
+            // Play track
+            customPlayer.play(track);
+            assertThat(frame.getTrackTablePanel().getCurrentPlayingTrackId()).isEqualTo("track-abc");
+            assertThat(frame.getTrackTablePanel().getCurrentPlaybackState()).isEqualTo(PlaybackState.PLAYING);
+
+            JLabel playingCell = (JLabel) frame.getTrackTablePanel().getTable().getCellRenderer(0, 0)
+                    .getTableCellRendererComponent(frame.getTrackTablePanel().getTable(), 1, false, false, 0, 0);
+            assertThat(playingCell.getIcon()).isNotNull();
+            assertThat(playingCell.getText()).isEmpty();
+
+            // Pause
+            customPlayer.pause();
+            assertThat(frame.getTrackTablePanel().getCurrentPlayingTrackId()).isEqualTo("track-abc");
+            assertThat(frame.getTrackTablePanel().getCurrentPlaybackState()).isEqualTo(PlaybackState.PAUSED);
+
+            JLabel pausedStatusCell = (JLabel) frame.getTrackTablePanel().getTable().getCellRenderer(0, 0)
+                    .getTableCellRendererComponent(frame.getTrackTablePanel().getTable(), "", false, false, 0, 0);
+            assertThat(pausedStatusCell.getIcon()).isNotNull();
+            assertThat(pausedStatusCell.getText()).isEmpty();
+
+            // Resume
+            customPlayer.resume();
+            assertThat(frame.getTrackTablePanel().getCurrentPlayingTrackId()).isEqualTo("track-abc");
+            assertThat(frame.getTrackTablePanel().getCurrentPlaybackState()).isEqualTo(PlaybackState.PLAYING);
+
+            // Stop
+            customPlayer.stop();
+            assertThat(frame.getTrackTablePanel().getCurrentPlayingTrackId()).isNull();
+            assertThat(frame.getTrackTablePanel().getCurrentPlaybackState()).isEqualTo(PlaybackState.STOPPED);
+
+            JLabel stoppedStatusCell = (JLabel) frame.getTrackTablePanel().getTable().getCellRenderer(0, 0)
+                    .getTableCellRendererComponent(frame.getTrackTablePanel().getTable(), "", false, false, 0, 0);
+            assertThat(stoppedStatusCell.getIcon()).isNull();
+            assertThat(stoppedStatusCell.getText()).isEmpty();
+
+            JLabel trackNumCell = (JLabel) frame.getTrackTablePanel().getTable().getCellRenderer(0, 1)
+                    .getTableCellRendererComponent(frame.getTrackTablePanel().getTable(), 1, false, false, 0, 1);
+            assertThat(trackNumCell.getIcon()).isNull();
+            assertThat(trackNumCell.getText()).isEqualTo("1");
+        } finally {
+            frame.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("Opening album detail saves scroll position, and returning restores previous scroll offset")
+    void testAlbumDetailNavigationPreservesScrollPosition() {
+        Library library = new Library();
+        for (int i = 0; i < 40; i++) {
+            Track t = Track.builder()
+                    .id("trk-" + i)
+                    .filePath("trk_" + i + ".mp3")
+                    .title("Song " + i)
+                    .artist("Artist " + i)
+                    .album("Album " + i)
+                    .build();
+            library.addTrack(t);
+        }
+
+        MainFrame frame = new MainFrame(library, null);
+        try {
+            frame.setSize(800, 600);
+            frame.showAlbumGrid(false);
+            frame.doLayout();
+
+            var grid = frame.getAlbumGridViewPanel();
+            grid.setSize(800, 500);
+            grid.getScrollPane().setSize(800, 500);
+            grid.getScrollPane().doLayout();
+
+            int max = grid.getScrollPane().getVerticalScrollBar().getMaximum() - grid.getScrollPane().getVerticalScrollBar().getVisibleAmount();
+            int testScrollOffset = Math.max(20, max / 2);
+            grid.getScrollPane().getVerticalScrollBar().setValue(testScrollOffset);
+
+            var albums = frame.getOrComputeAlbums();
+            assertThat(albums).isNotEmpty();
+            var targetAlbum = albums.get(5);
+
+            // Open album detail
+            frame.openAlbumDetail(targetAlbum);
+            assertThat(grid.getSavedScrollPosition()).isEqualTo(testScrollOffset);
+            assertThat(grid.getLastSelectedAlbum()).isEqualTo(targetAlbum);
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+
+            // Simulate returning from album detail (clicking back button)
+            frame.getAlbumHeaderPanel().getBackButton().doClick();
+
+            // Should be back to album grid and scroll position restored
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isFalse();
+            assertThat(grid.getScrollPane().getVerticalScrollBar().getValue()).isEqualTo(testScrollOffset);
+        } finally {
+            frame.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("MainFrame updateLanguage cascades to track table Track# header in English and Japanese with 80px width")
+    void testTrackNumberHeaderLanguageSwitchInMainFrame() {
+        MainFrame frame = new MainFrame();
+
+        try {
+            var table = frame.getTrackTablePanel().getTable();
+            var col = table.getColumnModel().getColumn(1);
+
+            // English default
+            assertThat(col.getHeaderValue()).isEqualTo("#");
+            assertThat(col.getPreferredWidth()).isEqualTo(80);
+
+            // Switch to Japanese
+            I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+            frame.updateLanguage();
+
+            assertThat(col.getHeaderValue()).isEqualTo("トラック番号");
+            assertThat(col.getPreferredWidth()).isEqualTo(80);
+
+            // Switch back to English
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+            frame.updateLanguage();
+
+            assertThat(col.getHeaderValue()).isEqualTo("#");
+            assertThat(col.getPreferredWidth()).isEqualTo(80);
+        } finally {
+            frame.dispose();
+        }
+    }
+
     // --- Test doubles for tracking resource lifecycle ---
 
     private static class TrackingAudioPlayer implements AudioPlayer {
         boolean closed = false;
+        int stopCallCount = 0;
         private PlaybackState state = PlaybackState.STOPPED;
         private Track currentTrack = null;
+        private final List<PlayerListener> listeners = new java.util.concurrent.CopyOnWriteArrayList<>();
 
-        @Override public void play(Track track) { this.currentTrack = track; this.state = PlaybackState.PLAYING; }
-        @Override public void pause() { this.state = PlaybackState.PAUSED; }
-        @Override public void resume() { this.state = PlaybackState.PLAYING; }
-        @Override public void stop() { this.state = PlaybackState.STOPPED; }
+        @Override public void play(Track track) {
+            this.currentTrack = track;
+            this.state = PlaybackState.PLAYING;
+            listeners.forEach(l -> l.onTrackStarted(track));
+        }
+        @Override public void pause() {
+            this.state = PlaybackState.PAUSED;
+            listeners.forEach(l -> l.onStateChanged(PlaybackState.PAUSED));
+        }
+        @Override public void resume() {
+            this.state = PlaybackState.PLAYING;
+            listeners.forEach(l -> l.onStateChanged(PlaybackState.PLAYING));
+        }
+        @Override public void stop() {
+            this.state = PlaybackState.STOPPED;
+            stopCallCount++;
+            listeners.forEach(l -> l.onTrackFinished(currentTrack));
+        }
         @Override public void seekTo(long seconds) {}
         @Override public void setVolume(float volume) {}
         @Override public float getVolume() { return 0.5f; }
@@ -1083,8 +1416,8 @@ class MainFrameTest {
         @Override public long getCurrentPositionSeconds() { return 0; }
         @Override public long getTotalDurationSeconds() { return 100; }
         @Override public boolean isPlaying() { return state == PlaybackState.PLAYING; }
-        @Override public void addPlayerListener(PlayerListener listener) {}
-        @Override public void removePlayerListener(PlayerListener listener) {}
+        @Override public void addPlayerListener(PlayerListener listener) { listeners.add(listener); }
+        @Override public void removePlayerListener(PlayerListener listener) { listeners.remove(listener); }
         @Override public void close() { closed = true; }
     }
 

@@ -385,6 +385,82 @@ class Mp3MetadataExtractorTest {
         assertThat(Mp3MetadataExtractor.estimateDurationFromBitrate(mp3File, Math.max(0, startOffset - 10))).isEqualTo(0);
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            "'1', 1",
+            "'1/2', 1",
+            "'2/2', 2",
+            "'12', 12",
+            "'12/20', 12",
+            "'  3 / 5  ', 3",
+            "'0/0', 0",
+            "'0', 0",
+            "'-1', 0",
+            "'-1/2', 0",
+            "'/2', 0",
+            "'A', 0",
+            "'Disc 1', 0",
+            "'', 0",
+            "'   ', 0"
+    })
+    @DisplayName("parseDiscNumber correctly parses disc numbers and handles malformed strings safely")
+    void testParseDiscNumber(String input, int expected) {
+        assertThat(Mp3MetadataExtractor.parseDiscNumber(input)).isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("parseDiscNumber safely returns 0 for null")
+    void testParseDiscNumberNull() {
+        assertThat(Mp3MetadataExtractor.parseDiscNumber(null)).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("extract extracts TPOS (discNumber), TBPM (bpm), and TPE2 (albumArtist) from ID3v2 tags")
+    void testExtractNewMetadataFieldsFromId3v2() throws Exception {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+        ByteArrayOutputStream tagBody = new ByteArrayOutputStream();
+        writeTextFrame(tagBody, "TIT2", "Advanced Song");
+        writeTextFrame(tagBody, "TPE1", "Lead Singer");
+        writeTextFrame(tagBody, "TPE2", "The Great Band"); // Album Artist
+        writeTextFrame(tagBody, "TALB", "Double Album");
+        writeTextFrame(tagBody, "TCON", "Progressive Rock");
+        writeTextFrame(tagBody, "TYER", "2024");
+        writeTextFrame(tagBody, "TRCK", "3/10");
+        writeTextFrame(tagBody, "TPOS", "2/2"); // Disc number
+        writeTextFrame(tagBody, "TBPM", "135"); // BPM
+
+        byte[] bodyBytes = tagBody.toByteArray();
+        baos.write(new byte[]{'I', 'D', '3', 0x04, 0x00, 0x00});
+        baos.write(encodeSynchsafe(bodyBytes.length));
+        baos.write(bodyBytes);
+
+        // Valid MPEG 1 Layer III frame (128 kbps, 44.1 kHz -> 417 bytes)
+        int frameSize = 417;
+        byte[] frame = new byte[frameSize];
+        frame[0] = (byte) 0xFF;
+        frame[1] = (byte) 0xFB;
+        frame[2] = (byte) 0x90;
+        frame[3] = (byte) 0x64;
+        baos.write(frame);
+
+        Path mp3File = tempDir.resolve("advanced_metadata.mp3");
+        Files.write(mp3File, baos.toByteArray());
+
+        Mp3MetadataExtractor extractor = new Mp3MetadataExtractor();
+        Track track = extractor.extract(mp3File);
+
+        assertThat(track).isNotNull();
+        assertThat(track.getTitle()).isEqualTo("Advanced Song");
+        assertThat(track.getArtist()).isEqualTo("Lead Singer");
+        assertThat(track.getAlbumArtist()).isEqualTo("The Great Band");
+        assertThat(track.getAlbum()).isEqualTo("Double Album");
+        assertThat(track.getTrackNumber()).isEqualTo(3);
+        assertThat(track.getDiscNumber()).isEqualTo(2);
+        assertThat(track.getBpm()).isEqualTo(135);
+        assertThat(track.getBitrate()).isGreaterThan(0);
+    }
+
     // --- Helper for creating minimal valid MP3 with ID3v2.4 and MPEG audio frame ---
 
     private static byte[] createMinimalValidMp3WithId3v2(

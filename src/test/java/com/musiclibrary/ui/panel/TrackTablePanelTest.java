@@ -30,7 +30,7 @@ class TrackTablePanelTest {
         TrackTablePanel panel = new TrackTablePanel();
 
         assertThat(panel.getTable()).isNotNull();
-        assertThat(panel.getTable().getColumnCount()).isEqualTo(8);
+        assertThat(panel.getTable().getColumnCount()).isEqualTo(9);
         assertThat(panel.getTable().getRowSorter()).isNotNull();
         assertThat(panel.getTable().getRowHeight()).isEqualTo(26);
         assertThat(panel.getScrollPane()).isNotNull();
@@ -73,43 +73,44 @@ class TrackTablePanelTest {
         assertThat(panel.getTrackCount()).isEqualTo(2);
 
         // Row 1 raw model values (crucial for numeric sorting)
-        assertThat(panel.getTable().getValueAt(0, 0)).isEqualTo(1);
-        assertThat(panel.getTable().getValueAt(0, 1)).isEqualTo("Bohemian Rhapsody");
-        assertThat(panel.getTable().getValueAt(0, 2)).isEqualTo("Queen");
-        assertThat(panel.getTable().getValueAt(0, 3)).isEqualTo("A Night at the Opera");
-        assertThat(panel.getTable().getValueAt(0, 4)).isEqualTo(354L);
-        assertThat(panel.getTable().getValueAt(0, 5)).isEqualTo("Rock");
-        assertThat(panel.getTable().getValueAt(0, 6)).isEqualTo(1975);
-        assertThat(panel.getTable().getValueAt(0, 7)).isEqualTo(5);
+        assertThat(panel.getTable().getValueAt(0, 0)).isEqualTo("");
+        assertThat(panel.getTable().getValueAt(0, 1)).isEqualTo(1);
+        assertThat(panel.getTable().getValueAt(0, 2)).isEqualTo("Bohemian Rhapsody");
+        assertThat(panel.getTable().getValueAt(0, 3)).isEqualTo("Queen");
+        assertThat(panel.getTable().getValueAt(0, 4)).isEqualTo("A Night at the Opera");
+        assertThat(panel.getTable().getValueAt(0, 5)).isEqualTo(354L);
+        assertThat(panel.getTable().getValueAt(0, 6)).isEqualTo("Rock");
+        assertThat(panel.getTable().getValueAt(0, 7)).isEqualTo(1975);
+        assertThat(panel.getTable().getValueAt(0, 8)).isEqualTo(5);
 
         // Row 1 rendered visual text via Flyweight renderers
-        JLabel numLabel1 = (JLabel) panel.getTable().getCellRenderer(0, 0)
-                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        JLabel numLabel1 = (JLabel) panel.getTable().getCellRenderer(0, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 1), false, false, 0, 1);
         assertThat(numLabel1.getText()).isEqualTo("1");
 
-        JLabel durLabel1 = (JLabel) panel.getTable().getCellRenderer(0, 4)
-                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 4), false, false, 0, 4);
+        JLabel durLabel1 = (JLabel) panel.getTable().getCellRenderer(0, 5)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 5), false, false, 0, 5);
         assertThat(durLabel1.getText()).isEqualTo("05:54");
 
-        JLabel ratingLabel1 = (JLabel) panel.getTable().getCellRenderer(0, 7)
-                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 7), false, false, 0, 7);
+        JLabel ratingLabel1 = (JLabel) panel.getTable().getCellRenderer(0, 8)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 8), false, false, 0, 8);
         assertThat(ratingLabel1.getText()).isEqualTo("★★★★★");
 
         // Row 2 boundary rendered visual text
-        JLabel numLabel2 = (JLabel) panel.getTable().getCellRenderer(1, 0)
-                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 0), false, false, 1, 0);
+        JLabel numLabel2 = (JLabel) panel.getTable().getCellRenderer(1, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 1), false, false, 1, 1);
         assertThat(numLabel2.getText()).isEqualTo("-");
 
-        JLabel durLabel2 = (JLabel) panel.getTable().getCellRenderer(1, 4)
-                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 4), false, false, 1, 4);
+        JLabel durLabel2 = (JLabel) panel.getTable().getCellRenderer(1, 5)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 5), false, false, 1, 5);
         assertThat(durLabel2.getText()).isEqualTo("00:00");
 
-        JLabel yearLabel2 = (JLabel) panel.getTable().getCellRenderer(1, 6)
-                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 6), false, false, 1, 6);
+        JLabel yearLabel2 = (JLabel) panel.getTable().getCellRenderer(1, 7)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 7), false, false, 1, 7);
         assertThat(yearLabel2.getText()).isEqualTo("-");
 
-        JLabel ratingLabel2 = (JLabel) panel.getTable().getCellRenderer(1, 7)
-                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 7), false, false, 1, 7);
+        JLabel ratingLabel2 = (JLabel) panel.getTable().getCellRenderer(1, 8)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 8), false, false, 1, 8);
         assertThat(ratingLabel2.getText()).isEqualTo("—");
     }
 
@@ -176,7 +177,7 @@ class TrackTablePanelTest {
     }
 
     @Test
-    @DisplayName("updateLanguage updates all 8 column header names and context menu items in Japanese and English")
+    @DisplayName("updateLanguage updates all 9 column header names and context menu items in Japanese and English")
     void testUpdateLanguage() {
         TrackTablePanel panel = new TrackTablePanel();
 
@@ -184,14 +185,15 @@ class TrackTablePanelTest {
         I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
         panel.updateLanguage();
 
-        assertThat(panel.getTable().getColumnModel().getColumn(0).getHeaderValue()).isEqualTo("番号");
-        assertThat(panel.getTable().getColumnModel().getColumn(1).getHeaderValue()).isEqualTo("タイトル");
-        assertThat(panel.getTable().getColumnModel().getColumn(2).getHeaderValue()).isEqualTo("アーティスト");
-        assertThat(panel.getTable().getColumnModel().getColumn(3).getHeaderValue()).isEqualTo("アルバム");
-        assertThat(panel.getTable().getColumnModel().getColumn(4).getHeaderValue()).isEqualTo("時間");
-        assertThat(panel.getTable().getColumnModel().getColumn(5).getHeaderValue()).isEqualTo("ジャンル");
-        assertThat(panel.getTable().getColumnModel().getColumn(6).getHeaderValue()).isEqualTo("リリース年");
-        assertThat(panel.getTable().getColumnModel().getColumn(7).getHeaderValue()).isEqualTo("レート");
+        assertThat(panel.getTable().getColumnModel().getColumn(0).getHeaderValue()).isEqualTo("");
+        assertThat(panel.getTable().getColumnModel().getColumn(1).getHeaderValue()).isEqualTo("トラック番号");
+        assertThat(panel.getTable().getColumnModel().getColumn(2).getHeaderValue()).isEqualTo("タイトル");
+        assertThat(panel.getTable().getColumnModel().getColumn(3).getHeaderValue()).isEqualTo("アーティスト");
+        assertThat(panel.getTable().getColumnModel().getColumn(4).getHeaderValue()).isEqualTo("アルバム");
+        assertThat(panel.getTable().getColumnModel().getColumn(5).getHeaderValue()).isEqualTo("時間");
+        assertThat(panel.getTable().getColumnModel().getColumn(6).getHeaderValue()).isEqualTo("ジャンル");
+        assertThat(panel.getTable().getColumnModel().getColumn(7).getHeaderValue()).isEqualTo("リリース年");
+        assertThat(panel.getTable().getColumnModel().getColumn(8).getHeaderValue()).isEqualTo("レート");
 
         // Context menu item texts
         assertThat(panel.getContextMenu().getComponent(0)).isInstanceOf(javax.swing.JMenuItem.class);
@@ -202,8 +204,9 @@ class TrackTablePanelTest {
         I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
         panel.updateLanguage();
 
-        assertThat(panel.getTable().getColumnModel().getColumn(0).getHeaderValue()).isEqualTo("#");
-        assertThat(panel.getTable().getColumnModel().getColumn(1).getHeaderValue()).isEqualTo("Title");
+        assertThat(panel.getTable().getColumnModel().getColumn(0).getHeaderValue()).isEqualTo("");
+        assertThat(panel.getTable().getColumnModel().getColumn(1).getHeaderValue()).isEqualTo("#");
+        assertThat(panel.getTable().getColumnModel().getColumn(2).getHeaderValue()).isEqualTo("Title");
         assertThat(playItem.getText()).isEqualTo("Play");
     }
 
@@ -257,48 +260,48 @@ class TrackTablePanelTest {
         panel.setTracks(List.of(t));
 
         // 59 seconds -> 00:59
-        JLabel dur59 = (JLabel) panel.getTable().getCellRenderer(0, 4)
-                .getTableCellRendererComponent(panel.getTable(), 59L, false, false, 0, 4);
+        JLabel dur59 = (JLabel) panel.getTable().getCellRenderer(0, 5)
+                .getTableCellRendererComponent(panel.getTable(), 59L, false, false, 0, 5);
         assertThat(dur59.getText()).isEqualTo("00:59");
 
         // 60 seconds -> 01:00
-        JLabel dur60 = (JLabel) panel.getTable().getCellRenderer(0, 4)
-                .getTableCellRendererComponent(panel.getTable(), 60L, false, false, 0, 4);
+        JLabel dur60 = (JLabel) panel.getTable().getCellRenderer(0, 5)
+                .getTableCellRendererComponent(panel.getTable(), 60L, false, false, 0, 5);
         assertThat(dur60.getText()).isEqualTo("01:00");
 
         // 605 seconds -> 10:05
-        JLabel dur605 = (JLabel) panel.getTable().getCellRenderer(0, 4)
-                .getTableCellRendererComponent(panel.getTable(), 605L, false, false, 0, 4);
+        JLabel dur605 = (JLabel) panel.getTable().getCellRenderer(0, 5)
+                .getTableCellRendererComponent(panel.getTable(), 605L, false, false, 0, 5);
         assertThat(dur605.getText()).isEqualTo("10:05");
 
         // 3661 seconds -> 01:01:01 (TimeFormatter format)
-        JLabel dur3661 = (JLabel) panel.getTable().getCellRenderer(0, 4)
-                .getTableCellRendererComponent(panel.getTable(), 3661L, false, false, 0, 4);
+        JLabel dur3661 = (JLabel) panel.getTable().getCellRenderer(0, 5)
+                .getTableCellRendererComponent(panel.getTable(), 3661L, false, false, 0, 5);
         assertThat(dur3661.getText()).isEqualTo("01:01:01");
 
         // Star ratings 1 to 5, and boundaries
-        JLabel r1 = (JLabel) panel.getTable().getCellRenderer(0, 7)
-                .getTableCellRendererComponent(panel.getTable(), 1, false, false, 0, 7);
+        JLabel r1 = (JLabel) panel.getTable().getCellRenderer(0, 8)
+                .getTableCellRendererComponent(panel.getTable(), 1, false, false, 0, 8);
         assertThat(r1.getText()).isEqualTo("★");
 
-        JLabel r2 = (JLabel) panel.getTable().getCellRenderer(0, 7)
-                .getTableCellRendererComponent(panel.getTable(), 2, false, false, 0, 7);
+        JLabel r2 = (JLabel) panel.getTable().getCellRenderer(0, 8)
+                .getTableCellRendererComponent(panel.getTable(), 2, false, false, 0, 8);
         assertThat(r2.getText()).isEqualTo("★★");
 
-        JLabel r3 = (JLabel) panel.getTable().getCellRenderer(0, 7)
-                .getTableCellRendererComponent(panel.getTable(), 3, false, false, 0, 7);
+        JLabel r3 = (JLabel) panel.getTable().getCellRenderer(0, 8)
+                .getTableCellRendererComponent(panel.getTable(), 3, false, false, 0, 8);
         assertThat(r3.getText()).isEqualTo("★★★");
 
-        JLabel r4 = (JLabel) panel.getTable().getCellRenderer(0, 7)
-                .getTableCellRendererComponent(panel.getTable(), 4, false, false, 0, 7);
+        JLabel r4 = (JLabel) panel.getTable().getCellRenderer(0, 8)
+                .getTableCellRendererComponent(panel.getTable(), 4, false, false, 0, 8);
         assertThat(r4.getText()).isEqualTo("★★★★");
 
-        JLabel r5 = (JLabel) panel.getTable().getCellRenderer(0, 7)
-                .getTableCellRendererComponent(panel.getTable(), 5, false, false, 0, 7);
+        JLabel r5 = (JLabel) panel.getTable().getCellRenderer(0, 8)
+                .getTableCellRendererComponent(panel.getTable(), 5, false, false, 0, 8);
         assertThat(r5.getText()).isEqualTo("★★★★★");
 
-        JLabel rOut = (JLabel) panel.getTable().getCellRenderer(0, 7)
-                .getTableCellRendererComponent(panel.getTable(), 99, false, false, 0, 7);
+        JLabel rOut = (JLabel) panel.getTable().getCellRenderer(0, 8)
+                .getTableCellRendererComponent(panel.getTable(), 99, false, false, 0, 8);
         assertThat(rOut.getText()).isEqualTo("—");
     }
 
@@ -646,29 +649,29 @@ class TrackTablePanelTest {
 
         panel.setTracks(List.of(normalTrack, missingTrack));
 
-        // Column 1 is Title column (unselected)
-        JLabel normalLabel = (JLabel) panel.getTable().getCellRenderer(0, 1)
-                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 1), false, false, 0, 1);
+        // Column 2 is Title column (unselected)
+        JLabel normalLabel = (JLabel) panel.getTable().getCellRenderer(0, 2)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 2), false, false, 0, 2);
         assertThat(normalLabel.getText()).isEqualTo("Normal Song");
         assertThat(normalLabel.getToolTipText()).isNull();
 
-        JLabel missingLabel = (JLabel) panel.getTable().getCellRenderer(1, 1)
-                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 1), false, false, 1, 1);
+        JLabel missingLabel = (JLabel) panel.getTable().getCellRenderer(1, 2)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 2), false, false, 1, 2);
         assertThat(missingLabel.getText()).isEqualTo("⚠️ Missing Song");
         assertThat(missingLabel.getToolTipText()).isEqualTo(I18nManager.getInstance().get("missing.warning_tooltip"));
         assertThat(missingLabel.getForeground()).isEqualTo(new java.awt.Color(220, 80, 80));
 
         // When row is selected, renderer does not override selection color
-        JLabel missingSelectedLabel = (JLabel) panel.getTable().getCellRenderer(1, 1)
-                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 1), true, false, 1, 1);
+        JLabel missingSelectedLabel = (JLabel) panel.getTable().getCellRenderer(1, 2)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 2), true, false, 1, 2);
         assertThat(missingSelectedLabel.getText()).isEqualTo("⚠️ Missing Song");
         assertThat(missingSelectedLabel.getToolTipText()).isEqualTo(I18nManager.getInstance().get("missing.warning_tooltip"));
 
         // updateMissingTracks triggers repaint and reflects state
         missingTrack.setMissing(false);
         panel.updateMissingTracks(java.util.Collections.emptyList());
-        JLabel resolvedLabel = (JLabel) panel.getTable().getCellRenderer(1, 1)
-                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 1), false, false, 1, 1);
+        JLabel resolvedLabel = (JLabel) panel.getTable().getCellRenderer(1, 2)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 2), false, false, 1, 2);
         assertThat(resolvedLabel.getText()).isEqualTo("Missing Song");
         assertThat(resolvedLabel.getToolTipText()).isNull();
 
@@ -690,19 +693,19 @@ class TrackTablePanelTest {
 
         // Sort by Title column descending: row 0 becomes "Z Song (Missing)", row 1 becomes "A Song (Normal)"
         javax.swing.RowSorter<?> sorter = panel.getTable().getRowSorter();
-        sorter.setSortKeys(List.of(new javax.swing.RowSorter.SortKey(1, javax.swing.SortOrder.DESCENDING)));
+        sorter.setSortKeys(List.of(new javax.swing.RowSorter.SortKey(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TITLE, javax.swing.SortOrder.DESCENDING)));
 
         // View Row 0 is now trackZ (Missing)
-        assertThat(panel.getTable().getValueAt(0, 1)).isEqualTo("Z Song (Missing)");
-        JLabel viewRow0Label = (JLabel) panel.getTable().getCellRenderer(0, 1)
-                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 1), false, false, 0, 1);
+        assertThat(panel.getTable().getValueAt(0, 2)).isEqualTo("Z Song (Missing)");
+        JLabel viewRow0Label = (JLabel) panel.getTable().getCellRenderer(0, 2)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 2), false, false, 0, 2);
         assertThat(viewRow0Label.getText()).isEqualTo("⚠️ Z Song (Missing)");
         assertThat(viewRow0Label.getToolTipText()).isEqualTo(I18nManager.getInstance().get("missing.warning_tooltip"));
 
         // View Row 1 is now trackA (Normal)
-        assertThat(panel.getTable().getValueAt(1, 1)).isEqualTo("A Song (Normal)");
-        JLabel viewRow1Label = (JLabel) panel.getTable().getCellRenderer(1, 1)
-                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 1), false, false, 1, 1);
+        assertThat(panel.getTable().getValueAt(1, 2)).isEqualTo("A Song (Normal)");
+        JLabel viewRow1Label = (JLabel) panel.getTable().getCellRenderer(1, 2)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 2), false, false, 1, 2);
         assertThat(viewRow1Label.getText()).isEqualTo("A Song (Normal)");
         assertThat(viewRow1Label.getToolTipText()).isNull();
     }
@@ -726,12 +729,13 @@ class TrackTablePanelTest {
 
         panel.setTracks(List.of(original));
 
-        assertThat(panel.getTable().getValueAt(0, 0)).isEqualTo(1);
-        assertThat(panel.getTable().getValueAt(0, 1)).isEqualTo("Original Title");
-        assertThat(panel.getTable().getValueAt(0, 2)).isEqualTo("Original Artist");
-        assertThat(panel.getTable().getValueAt(0, 3)).isEqualTo("Original Album");
-        assertThat(panel.getTable().getValueAt(0, 5)).isEqualTo("Old Genre");
-        assertThat(panel.getTable().getValueAt(0, 6)).isEqualTo(2000);
+        assertThat(panel.getTable().getValueAt(0, 0)).isEqualTo("");
+        assertThat(panel.getTable().getValueAt(0, 1)).isEqualTo(1);
+        assertThat(panel.getTable().getValueAt(0, 2)).isEqualTo("Original Title");
+        assertThat(panel.getTable().getValueAt(0, 3)).isEqualTo("Original Artist");
+        assertThat(panel.getTable().getValueAt(0, 4)).isEqualTo("Original Album");
+        assertThat(panel.getTable().getValueAt(0, 6)).isEqualTo("Old Genre");
+        assertThat(panel.getTable().getValueAt(0, 7)).isEqualTo(2000);
 
         // Updated track
         Track updated = original.toBuilder()
@@ -746,12 +750,13 @@ class TrackTablePanelTest {
         panel.updateTrack(updated);
 
         // Verify updated table cells
-        assertThat(panel.getTable().getValueAt(0, 0)).isEqualTo(9);
-        assertThat(panel.getTable().getValueAt(0, 1)).isEqualTo("Updated Title");
-        assertThat(panel.getTable().getValueAt(0, 2)).isEqualTo("Updated Artist");
-        assertThat(panel.getTable().getValueAt(0, 3)).isEqualTo("Updated Album");
-        assertThat(panel.getTable().getValueAt(0, 5)).isEqualTo("Modern Rock");
-        assertThat(panel.getTable().getValueAt(0, 6)).isEqualTo(2025);
+        assertThat(panel.getTable().getValueAt(0, 0)).isEqualTo("");
+        assertThat(panel.getTable().getValueAt(0, 1)).isEqualTo(9);
+        assertThat(panel.getTable().getValueAt(0, 2)).isEqualTo("Updated Title");
+        assertThat(panel.getTable().getValueAt(0, 3)).isEqualTo("Updated Artist");
+        assertThat(panel.getTable().getValueAt(0, 4)).isEqualTo("Updated Album");
+        assertThat(panel.getTable().getValueAt(0, 6)).isEqualTo("Modern Rock");
+        assertThat(panel.getTable().getValueAt(0, 7)).isEqualTo(2025);
     }
 
     @Test
@@ -793,6 +798,738 @@ class TrackTablePanelTest {
         assertThat(summary.trackCount()).isEqualTo(2);
         assertThat(summary.totalDurationSeconds()).isEqualTo(300L);
         assertThat(summary.totalFileSizeBytes()).isEqualTo(3000L);
+    }
+
+    @Test
+    @DisplayName("Column visibility toggle via setColumnVisible and header menu preserves column ordering and mandatory title")
+    void testColumnVisibilityToggleAndHeaderMenu() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        // 1. Initial default columns: exactly 9 columns
+        assertThat(panel.getTable().getColumnCount()).isEqualTo(9);
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_STATUS)).isTrue();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TRACK_NUMBER)).isTrue();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TITLE)).isTrue();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_ARTIST)).isTrue();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_ALBUM)).isTrue();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_DURATION)).isTrue();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_GENRE)).isTrue();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_YEAR)).isTrue();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_RATING)).isTrue();
+
+        // Non-default columns initially hidden
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_ALBUM_ARTIST)).isFalse();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_DISC_NUMBER)).isFalse();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_BPM)).isFalse();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_BITRATE)).isFalse();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_DATE_ADDED)).isFalse();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_PLAY_COUNT)).isFalse();
+
+        // 2. Header popup menu verification
+        assertThat(panel.getHeaderPopupMenu()).isNotNull();
+        assertThat(panel.getColumnMenuItems()).hasSize(15);
+        assertThat(panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_STATUS]).isNull();
+        javax.swing.JCheckBoxMenuItem titleItem = panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TITLE];
+        assertThat(titleItem.isEnabled()).isFalse();
+        assertThat(titleItem.isSelected()).isTrue();
+
+        // 3. Mandatory Status and Title columns cannot be hidden
+        panel.setColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_STATUS, false);
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_STATUS)).isTrue();
+        panel.setColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TITLE, false);
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TITLE)).isTrue();
+        assertThat(panel.getTable().getColumnCount()).isEqualTo(9);
+
+        // 4. Toggle Album Artist (modelIndex 4) -> should insert between Artist (3) and Album (5)
+        panel.setColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_ALBUM_ARTIST, true);
+        assertThat(panel.getTable().getColumnCount()).isEqualTo(10);
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_ALBUM_ARTIST)).isTrue();
+        assertThat(panel.getVisibleColumnModelIndices()).containsExactly(0, 1, 2, 3, 4, 5, 6, 7, 8, 14);
+
+        // 5. Toggle BPM (10) and Bitrate (11) -> ordered insertion
+        panel.setColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_BPM, true);
+        panel.setColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_BITRATE, true);
+        assertThat(panel.getTable().getColumnCount()).isEqualTo(12);
+        assertThat(panel.getVisibleColumnModelIndices()).containsExactly(0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 14);
+
+        // 6. Hide Track Number (1)
+        panel.setColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TRACK_NUMBER, false);
+        assertThat(panel.getTable().getColumnCount()).isEqualTo(11);
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TRACK_NUMBER)).isFalse();
+        assertThat(panel.getVisibleColumnModelIndices()).containsExactly(0, 2, 3, 4, 5, 6, 7, 8, 10, 11, 14);
+
+        // 7. Hide BPM (10) again
+        panel.setColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_BPM, false);
+        assertThat(panel.getTable().getColumnCount()).isEqualTo(10);
+        assertThat(panel.getVisibleColumnModelIndices()).containsExactly(0, 2, 3, 4, 5, 6, 7, 8, 11, 14);
+
+        // 8. Re-enable Track Number (1) -> goes back to position right after Status (0)
+        panel.setColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TRACK_NUMBER, true);
+        assertThat(panel.getVisibleColumnModelIndices()).containsExactly(0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 14);
+    }
+
+    @Test
+    @DisplayName("New column renderers (Bitrate, DateAdded, PlayCount, BPM, DiscNumber) format values cleanly")
+    void testNewColumnRenderersFormatting() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        // Enable all newly added columns
+        panel.setColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_DISC_NUMBER, true);
+        panel.setColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_BPM, true);
+        panel.setColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_BITRATE, true);
+        panel.setColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_DATE_ADDED, true);
+        panel.setColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_PLAY_COUNT, true);
+
+        java.time.Instant date = java.time.Instant.parse("2026-10-14T10:00:00Z");
+        String formattedDate = java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm")
+                .withZone(java.time.ZoneId.systemDefault())
+                .format(date);
+
+        Track t1 = Track.builder()
+                .filePath("C:/music/track1.mp3")
+                .discNumber(2)
+                .bpm(128)
+                .bitrate(320)
+                .dateAdded(date)
+                .playCount(42)
+                .build();
+
+        Track t2 = Track.builder()
+                .filePath("C:/music/track2.mp3")
+                .discNumber(0)
+                .bpm(0)
+                .bitrate(0)
+                .dateAdded(null)
+                .playCount(0)
+                .build();
+
+        panel.setTracks(List.of(t1, t2));
+
+        // Locate view column indices for the new columns
+        int discViewCol = panel.getTable().convertColumnIndexToView(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_DISC_NUMBER);
+        int bpmViewCol = panel.getTable().convertColumnIndexToView(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_BPM);
+        int bitrateViewCol = panel.getTable().convertColumnIndexToView(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_BITRATE);
+        int dateViewCol = panel.getTable().convertColumnIndexToView(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_DATE_ADDED);
+        int playCountViewCol = panel.getTable().convertColumnIndexToView(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_PLAY_COUNT);
+
+        // Row 1 values
+        JLabel discLabel1 = (JLabel) panel.getTable().getCellRenderer(0, discViewCol)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, discViewCol), false, false, 0, discViewCol);
+        assertThat(discLabel1.getText()).isEqualTo("2");
+
+        JLabel bpmLabel1 = (JLabel) panel.getTable().getCellRenderer(0, bpmViewCol)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, bpmViewCol), false, false, 0, bpmViewCol);
+        assertThat(bpmLabel1.getText()).isEqualTo("128");
+
+        JLabel bitrateLabel1 = (JLabel) panel.getTable().getCellRenderer(0, bitrateViewCol)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, bitrateViewCol), false, false, 0, bitrateViewCol);
+        assertThat(bitrateLabel1.getText()).isEqualTo("320 kbps");
+
+        JLabel dateLabel1 = (JLabel) panel.getTable().getCellRenderer(0, dateViewCol)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, dateViewCol), false, false, 0, dateViewCol);
+        assertThat(dateLabel1.getText()).isEqualTo(formattedDate);
+
+        JLabel playsLabel1 = (JLabel) panel.getTable().getCellRenderer(0, playCountViewCol)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, playCountViewCol), false, false, 0, playCountViewCol);
+        assertThat(playsLabel1.getText()).isEqualTo("42");
+
+        // Row 2 boundary/zero values
+        JLabel discLabel2 = (JLabel) panel.getTable().getCellRenderer(1, discViewCol)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, discViewCol), false, false, 1, discViewCol);
+        assertThat(discLabel2.getText()).isEqualTo("-");
+
+        JLabel bpmLabel2 = (JLabel) panel.getTable().getCellRenderer(1, bpmViewCol)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, bpmViewCol), false, false, 1, bpmViewCol);
+        assertThat(bpmLabel2.getText()).isEqualTo("-");
+
+        JLabel bitrateLabel2 = (JLabel) panel.getTable().getCellRenderer(1, bitrateViewCol)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, bitrateViewCol), false, false, 1, bitrateViewCol);
+        assertThat(bitrateLabel2.getText()).isEqualTo("-");
+
+        JLabel dateLabel2 = (JLabel) panel.getTable().getCellRenderer(1, dateViewCol)
+                .getTableCellRendererComponent(panel.getTable(), null, false, false, 1, dateViewCol);
+        assertThat(dateLabel2.getText()).isEqualTo("-");
+
+        JLabel playsLabel2 = (JLabel) panel.getTable().getCellRenderer(1, playCountViewCol)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, playCountViewCol), false, false, 1, playCountViewCol);
+        assertThat(playsLabel2.getText()).isEqualTo("0");
+    }
+
+    @Test
+    @DisplayName("Header context menu items reflect language change properly")
+    void testHeaderContextMenuLanguageUpdate() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        // Switch to Japanese
+        I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+        panel.updateLanguage();
+
+        assertThat(panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_BPM].getText()).isEqualTo("BPM");
+        assertThat(panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_ALBUM_ARTIST].getText()).isEqualTo("アルバムアーティスト");
+        assertThat(panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_BITRATE].getText()).isEqualTo("ビットレート");
+        assertThat(panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_DATE_ADDED].getText()).isEqualTo("追加日");
+        assertThat(panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_PLAY_COUNT].getText()).isEqualTo("再生回数");
+        assertThat(panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_DISC_NUMBER].getText()).isEqualTo("ディスク番号");
+
+        // Switch to English
+        I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        panel.updateLanguage();
+
+        assertThat(panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_ALBUM_ARTIST].getText()).isEqualTo("Album Artist");
+        assertThat(panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_BITRATE].getText()).isEqualTo("Bitrate");
+        assertThat(panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_DATE_ADDED].getText()).isEqualTo("Date Added");
+        assertThat(panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_PLAY_COUNT].getText()).isEqualTo("Plays");
+        assertThat(panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_DISC_NUMBER].getText()).isEqualTo("Disc #");
+    }
+
+    @Test
+    @DisplayName("All 14 columns visible and minimal (Title only) view both render and handle selection and sorting cleanly")
+    void testAllColumnsVisibleAndMinimalColumnsSelection() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        Track t1 = Track.builder()
+                .id("t1")
+                .filePath("C:/music/1.mp3")
+                .trackNumber(1)
+                .title("Alpha")
+                .artist("Artist A")
+                .albumArtist("Album Artist A")
+                .album("Album A")
+                .durationSeconds(200)
+                .genre("Rock")
+                .year(2020)
+                .discNumber(1)
+                .bpm(120)
+                .bitrate(320)
+                .playCount(10)
+                .rating(5)
+                .build();
+
+        Track t2 = Track.builder()
+                .id("t2")
+                .filePath("C:/music/2.mp3")
+                .trackNumber(2)
+                .title("Beta")
+                .artist("Artist B")
+                .albumArtist("Album Artist B")
+                .album("Album B")
+                .durationSeconds(150)
+                .genre("Pop")
+                .year(2022)
+                .discNumber(2)
+                .bpm(90)
+                .bitrate(256)
+                .playCount(5)
+                .rating(3)
+                .build();
+
+        panel.setTracks(List.of(t1, t2));
+
+        // --- 1. Enable ALL 15 columns ---
+        for (int i = 0; i < 15; i++) {
+            panel.setColumnVisible(i, true);
+        }
+        assertThat(panel.getTable().getColumnCount()).isEqualTo(15);
+        assertThat(panel.getVisibleColumnModelIndices()).containsExactly(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
+
+        // Verify selection on 15-column view
+        panel.getTable().setRowSelectionInterval(1, 1);
+        assertThat(panel.getSelectedTrack()).isEqualTo(t2);
+        assertThat(panel.getSelectedTracks()).containsExactly(t2);
+
+        // Verify all renderers render without throwing
+        for (int c = 0; c < 15; c++) {
+            panel.getTable().getCellRenderer(0, c)
+                    .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, c), false, false, 0, c);
+        }
+
+        // --- 2. Minimal View: Hide ALL columns except mandatory Status (0) and Title (2) ---
+        for (int i = 0; i < 15; i++) {
+            if (i != com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_STATUS
+                    && i != com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TITLE) {
+                panel.setColumnVisible(i, false);
+            }
+        }
+        assertThat(panel.getTable().getColumnCount()).isEqualTo(2);
+        assertThat(panel.getVisibleColumnModelIndices()).containsExactly(
+                com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_STATUS,
+                com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TITLE
+        );
+        assertThat(panel.getTable().getColumnModel().getColumn(0).getModelIndex())
+                .isEqualTo(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_STATUS);
+        assertThat(panel.getTable().getColumnModel().getColumn(1).getModelIndex())
+                .isEqualTo(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TITLE);
+
+        // Selection still works on minimal view
+        panel.getTable().setRowSelectionInterval(0, 0);
+        assertThat(panel.getSelectedTrack()).isEqualTo(t1);
+
+        // Render Title column safely
+        Object titleValue = panel.getTable().getValueAt(0, 1);
+        assertThat(titleValue).isEqualTo("Alpha");
+        panel.getTable().getCellRenderer(0, 1)
+                .getTableCellRendererComponent(panel.getTable(), titleValue, false, false, 0, 1);
+    }
+
+    @Test
+    @DisplayName("Random column toggle and re-enable always restores exact model index ordering")
+    void testRandomColumnToggleOrderPreservation() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        // Start by enabling ALL 15 columns
+        for (int i = 0; i < 15; i++) {
+            panel.setColumnVisible(i, true);
+        }
+        assertThat(panel.getVisibleColumnModelIndices()).containsExactly(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
+
+        // Arbitrarily hide a set of columns in non-sequential order: 9, 4, 12, 1, 14, 6
+        panel.setColumnVisible(9, false);
+        panel.setColumnVisible(4, false);
+        panel.setColumnVisible(12, false);
+        panel.setColumnVisible(1, false);
+        panel.setColumnVisible(14, false);
+        panel.setColumnVisible(6, false);
+
+        assertThat(panel.getVisibleColumnModelIndices()).containsExactly(0, 2, 3, 5, 7, 8, 10, 11, 13);
+
+        // Re-enable in completely different reversed/shuffled order: 14, 1, 9, 6, 12, 4
+        panel.setColumnVisible(14, true);
+        panel.setColumnVisible(1, true);
+        panel.setColumnVisible(9, true);
+        panel.setColumnVisible(6, true);
+        panel.setColumnVisible(12, true);
+        panel.setColumnVisible(4, true);
+
+        // Exact original natural model order must be fully restored
+        assertThat(panel.getVisibleColumnModelIndices()).containsExactly(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
+    }
+
+    @Test
+    @DisplayName("Simulated doClick on header checkbox menu items toggles visibility and Title item remains disabled")
+    void testHeaderMenuItemDoClick() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        // Genre is initially visible
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_GENRE)).isTrue();
+        javax.swing.JCheckBoxMenuItem genreItem = panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_GENRE];
+        assertThat(genreItem.isSelected()).isTrue();
+
+        // Simulate user clicking the menu item to hide Genre
+        genreItem.doClick();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_GENRE)).isFalse();
+        assertThat(genreItem.isSelected()).isFalse();
+
+        // Click again to re-show Genre
+        genreItem.doClick();
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_GENRE)).isTrue();
+        assertThat(genreItem.isSelected()).isTrue();
+
+        // Title item must be disabled and selected
+        javax.swing.JCheckBoxMenuItem titleItem = panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TITLE];
+        assertThat(titleItem.isEnabled()).isFalse();
+        assertThat(titleItem.isSelected()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Language toggle updates both table column headers and popup menu items simultaneously")
+    void testLanguageToggleUpdatesBothHeadersAndMenuItems() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        // Switch to Japanese
+        I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+        panel.updateLanguage();
+
+        // Check header values on visible columns
+        int titleViewCol = panel.getTable().convertColumnIndexToView(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TITLE);
+        assertThat(panel.getTable().getColumnModel().getColumn(titleViewCol).getHeaderValue()).isEqualTo("タイトル");
+
+        int artistViewCol = panel.getTable().convertColumnIndexToView(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_ARTIST);
+        assertThat(panel.getTable().getColumnModel().getColumn(artistViewCol).getHeaderValue()).isEqualTo("アーティスト");
+
+        // Switch back to English
+        I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        panel.updateLanguage();
+
+        assertThat(panel.getTable().getColumnModel().getColumn(titleViewCol).getHeaderValue()).isEqualTo("Title");
+        assertThat(panel.getTable().getColumnModel().getColumn(artistViewCol).getHeaderValue()).isEqualTo("Artist");
+    }
+
+    @Test
+    @DisplayName("Status cell renderer displays PlaybackStatusIcon when playing or paused while Track# column always displays track number")
+    void testPlaybackStatusIndicatorRendering() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        Track t1 = Track.builder().id("track-1").trackNumber(1).title("Song 1").filePath("1.mp3").build();
+        Track t2 = Track.builder().id("track-2").trackNumber(2).title("Song 2").filePath("2.mp3").build();
+        panel.setTracks(List.of(t1, t2));
+
+        // 1. Initial STOPPED state:
+        // Status column (col 0): empty
+        JLabel statusLabel1 = (JLabel) panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        assertThat(statusLabel1.getIcon()).isNull();
+        assertThat(statusLabel1.getText()).isEmpty();
+
+        // Track# column (col 1): "1"
+        JLabel trackNumLabel1 = (JLabel) panel.getTable().getCellRenderer(0, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 1), false, false, 0, 1);
+        assertThat(trackNumLabel1.getIcon()).isNull();
+        assertThat(trackNumLabel1.getText()).isEqualTo("1");
+
+        // 2. PLAYING on track-1
+        panel.setPlaybackStatus("track-1", com.musiclibrary.model.PlaybackState.PLAYING);
+        assertThat(panel.getCurrentPlayingTrackId()).isEqualTo("track-1");
+        assertThat(panel.getCurrentPlaybackState()).isEqualTo(com.musiclibrary.model.PlaybackState.PLAYING);
+
+        statusLabel1 = (JLabel) panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        assertThat(statusLabel1.getIcon()).isNotNull().isInstanceOf(com.musiclibrary.ui.table.PlaybackStatusIcon.class);
+        assertThat(statusLabel1.getText()).isEmpty();
+        assertThat(statusLabel1.getToolTipText()).isEqualTo("Playing");
+
+        // Track# column (col 1) ALWAYS displays the track number even when playing
+        trackNumLabel1 = (JLabel) panel.getTable().getCellRenderer(0, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 1), false, false, 0, 1);
+        assertThat(trackNumLabel1.getIcon()).isNull();
+        assertThat(trackNumLabel1.getText()).isEqualTo("1");
+
+        // Track 2 remains normal
+        JLabel statusLabel2 = (JLabel) panel.getTable().getCellRenderer(1, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 0), false, false, 1, 0);
+        assertThat(statusLabel2.getIcon()).isNull();
+        assertThat(statusLabel2.getText()).isEmpty();
+
+        JLabel trackNumLabel2 = (JLabel) panel.getTable().getCellRenderer(1, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 1), false, false, 1, 1);
+        assertThat(trackNumLabel2.getIcon()).isNull();
+        assertThat(trackNumLabel2.getText()).isEqualTo("2");
+
+        // 3. PAUSED on track-1
+        panel.setPlaybackStatus("track-1", com.musiclibrary.model.PlaybackState.PAUSED);
+        statusLabel1 = (JLabel) panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        assertThat(statusLabel1.getIcon()).isNotNull();
+        assertThat(statusLabel1.getText()).isEmpty();
+        assertThat(statusLabel1.getToolTipText()).isEqualTo("Paused");
+
+        trackNumLabel1 = (JLabel) panel.getTable().getCellRenderer(0, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 1), false, false, 0, 1);
+        assertThat(trackNumLabel1.getText()).isEqualTo("1");
+
+        // 4. STOPPED
+        panel.setPlaybackStatus(null, com.musiclibrary.model.PlaybackState.STOPPED);
+        statusLabel1 = (JLabel) panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        assertThat(statusLabel1.getIcon()).isNull();
+        assertThat(statusLabel1.getText()).isEmpty();
+
+        trackNumLabel1 = (JLabel) panel.getTable().getCellRenderer(0, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 1), false, false, 0, 1);
+        assertThat(trackNumLabel1.getText()).isEqualTo("1");
+    }
+
+    @Test
+    @DisplayName("Playback status indicator switches cleanly between Track A and Track B")
+    void testPlaybackStatusTrackSwitching() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        Track t1 = Track.builder().id("trk-a").trackNumber(1).title("Song A").filePath("a.mp3").build();
+        Track t2 = Track.builder().id("trk-b").trackNumber(2).title("Song B").filePath("b.mp3").build();
+        panel.setTracks(List.of(t1, t2));
+
+        // Start playing Track A
+        panel.setPlaybackStatus("trk-a", com.musiclibrary.model.PlaybackState.PLAYING);
+
+        JLabel statusA = (JLabel) panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        assertThat(statusA.getIcon()).isNotNull();
+        assertThat(statusA.getText()).isEmpty();
+
+        JLabel numA = (JLabel) panel.getTable().getCellRenderer(0, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 1), false, false, 0, 1);
+        assertThat(numA.getText()).isEqualTo("1");
+
+        JLabel statusB = (JLabel) panel.getTable().getCellRenderer(1, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 0), false, false, 1, 0);
+        assertThat(statusB.getIcon()).isNull();
+        assertThat(statusB.getText()).isEmpty();
+
+        JLabel numB = (JLabel) panel.getTable().getCellRenderer(1, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 1), false, false, 1, 1);
+        assertThat(numB.getText()).isEqualTo("2");
+
+        // Switch to playing Track B
+        panel.setPlaybackStatus("trk-b", com.musiclibrary.model.PlaybackState.PLAYING);
+
+        statusA = (JLabel) panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        assertThat(statusA.getIcon()).isNull();
+        assertThat(statusA.getText()).isEmpty();
+
+        statusB = (JLabel) panel.getTable().getCellRenderer(1, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 0), false, false, 1, 0);
+        assertThat(statusB.getIcon()).isNotNull();
+        assertThat(statusB.getText()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Playback status icon targets correct track even when table rows are sorted")
+    void testPlaybackStatusWithTableSorting() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        // t1 has Title "Zeta", t2 has Title "Alpha"
+        Track t1 = Track.builder().id("trk-1").trackNumber(1).title("Zeta").filePath("z.mp3").build();
+        Track t2 = Track.builder().id("trk-2").trackNumber(2).title("Alpha").filePath("a.mp3").build();
+        panel.setTracks(List.of(t1, t2));
+
+        // Sort by Title ascending (Model index 2)
+        panel.applySortConfig(new com.musiclibrary.settings.UserPreferences.SortConfig(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TITLE, "ASCENDING"));
+
+        // Now View Row 0 is t2 ("Alpha"), View Row 1 is t1 ("Zeta")
+        assertThat(panel.getTable().getValueAt(0, 2)).isEqualTo("Alpha");
+        assertThat(panel.getTable().getValueAt(1, 2)).isEqualTo("Zeta");
+
+        // Set playback on trk-1 ("Zeta", which is at view row 1)
+        panel.setPlaybackStatus("trk-1", com.musiclibrary.model.PlaybackState.PLAYING);
+
+        // View Row 0 (trk-2) should NOT have icon
+        JLabel viewRow0Status = (JLabel) panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        assertThat(viewRow0Status.getIcon()).isNull();
+        JLabel viewRow0Num = (JLabel) panel.getTable().getCellRenderer(0, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 1), false, false, 0, 1);
+        assertThat(viewRow0Num.getText()).isEqualTo("2");
+
+        // View Row 1 (trk-1) MUST have icon
+        JLabel viewRow1Status = (JLabel) panel.getTable().getCellRenderer(1, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 0), false, false, 1, 0);
+        assertThat(viewRow1Status.getIcon()).isNotNull();
+        assertThat(viewRow1Status.getText()).isEmpty();
+
+        JLabel viewRow1Num = (JLabel) panel.getTable().getCellRenderer(1, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 1), false, false, 1, 1);
+        assertThat(viewRow1Num.getText()).isEqualTo("1");
+    }
+
+    @Test
+    @DisplayName("Track with missing track number displays dash in track# column and icon in status column when playing")
+    void testPlaybackStatusWithoutTrackNumber() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        Track t0 = Track.builder().id("trk-zero").trackNumber(0).title("Unknown Track Num").filePath("u.mp3").build();
+        panel.setTracks(List.of(t0));
+
+        // STOPPED: status is empty, trackNum displays "-"
+        JLabel status = (JLabel) panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        assertThat(status.getIcon()).isNull();
+        assertThat(status.getText()).isEmpty();
+
+        JLabel trackNum = (JLabel) panel.getTable().getCellRenderer(0, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 1), false, false, 0, 1);
+        assertThat(trackNum.getIcon()).isNull();
+        assertThat(trackNum.getText()).isEqualTo("-");
+
+        // PLAYING: displays icon in status column, trackNum remains "-"
+        panel.setPlaybackStatus("trk-zero", com.musiclibrary.model.PlaybackState.PLAYING);
+        status = (JLabel) panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        assertThat(status.getIcon()).isNotNull();
+        assertThat(status.getText()).isEmpty();
+
+        trackNum = (JLabel) panel.getTable().getCellRenderer(0, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 1), false, false, 0, 1);
+        assertThat(trackNum.getIcon()).isNull();
+        assertThat(trackNum.getText()).isEqualTo("-");
+    }
+
+    @Test
+    @DisplayName("Playback status icon renders properly on selected table row")
+    void testPlaybackStatusSelectedRowRendering() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        Track t1 = Track.builder().id("trk-sel").trackNumber(5).title("Selected Song").filePath("s.mp3").build();
+        panel.setTracks(List.of(t1));
+
+        panel.setPlaybackStatus("trk-sel", com.musiclibrary.model.PlaybackState.PLAYING);
+
+        // Render with isSelected = true
+        JLabel selectedStatus = (JLabel) panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), true, true, 0, 0);
+
+        assertThat(selectedStatus.getIcon()).isNotNull();
+        assertThat(selectedStatus.getText()).isEmpty();
+
+        JLabel selectedNum = (JLabel) panel.getTable().getCellRenderer(0, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 1), true, true, 0, 1);
+        assertThat(selectedNum.getText()).isEqualTo("5");
+    }
+
+    @Test
+    @DisplayName("Status column is permanently pinned to View Index 0 and cannot be hidden or reordered")
+    void testStatusColumnPinnedPermanently() {
+        TrackTablePanel panel = new TrackTablePanel();
+        javax.swing.JTable table = panel.getTable();
+
+        // 1. Initial assertion: View index 0 must be the Status column (model index 0)
+        assertThat(table.getColumnModel().getColumn(0).getModelIndex())
+                .isEqualTo(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_STATUS);
+
+        // 2. Cannot be hidden via setColumnVisible(0, false)
+        panel.setColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_STATUS, false);
+        assertThat(panel.isColumnVisible(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_STATUS)).isTrue();
+        assertThat(table.getColumnModel().getColumn(0).getModelIndex())
+                .isEqualTo(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_STATUS);
+
+        // 3. Status column is excluded from the header popup menu items
+        javax.swing.JPopupMenu headerMenu = panel.getHeaderPopupMenu();
+        assertThat(headerMenu).isNotNull();
+        assertThat(panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_STATUS]).isNull();
+        for (java.awt.Component comp : headerMenu.getComponents()) {
+            if (comp instanceof javax.swing.JMenuItem item) {
+                assertThat(item.getText()).isNotEqualTo("Status");
+            }
+        }
+
+        // 4. Drag Status column away (move view column 0 to view column 3)
+        // The TableColumnModelListener must immediately pin it back to view index 0
+        table.moveColumn(0, 3);
+        assertThat(table.getColumnModel().getColumn(0).getModelIndex())
+                .isEqualTo(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_STATUS);
+
+        // 5. Drag another column into position 0 (move view column 2 to view column 0)
+        table.moveColumn(2, 0);
+        assertThat(table.getColumnModel().getColumn(0).getModelIndex())
+                .isEqualTo(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_STATUS);
+    }
+
+    @Test
+    @DisplayName("Comprehensive status and track number separation across multiple tracks and playback states")
+    void testStatusAndTrackNumberSeparationComprehensive() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        Track t1 = Track.builder().id("trk-1").trackNumber(1).title("Song 1").filePath("1.mp3").build();
+        Track t2 = Track.builder().id("trk-2").trackNumber(2).title("Song 2").filePath("2.mp3").build();
+        Track t3 = Track.builder().id("trk-3").trackNumber(0).title("Song 3 (No Track#)").filePath("3.mp3").build();
+        panel.setTracks(List.of(t1, t2, t3));
+
+        // State 1: All STOPPED
+        for (int row = 0; row < 3; row++) {
+            JLabel status = (JLabel) panel.getTable().getCellRenderer(row, 0)
+                    .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(row, 0), false, false, row, 0);
+            assertThat(status.getIcon()).isNull();
+            assertThat(status.getText()).isEmpty();
+        }
+        JLabel num1 = (JLabel) panel.getTable().getCellRenderer(0, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 1), false, false, 0, 1);
+        assertThat(num1.getText()).isEqualTo("1");
+        JLabel num2 = (JLabel) panel.getTable().getCellRenderer(1, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 1), false, false, 1, 1);
+        assertThat(num2.getText()).isEqualTo("2");
+        JLabel num3 = (JLabel) panel.getTable().getCellRenderer(2, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(2, 1), false, false, 2, 1);
+        assertThat(num3.getText()).isEqualTo("-");
+
+        // State 2: PLAYING on trk-2
+        panel.setPlaybackStatus("trk-2", com.musiclibrary.model.PlaybackState.PLAYING);
+
+        // Row 0 (trk-1): Status is empty, Track# is "1"
+        JLabel s0 = (JLabel) panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        assertThat(s0.getIcon()).isNull();
+        assertThat(s0.getText()).isEmpty();
+        JLabel n0 = (JLabel) panel.getTable().getCellRenderer(0, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 1), false, false, 0, 1);
+        assertThat(n0.getText()).isEqualTo("1");
+
+        // Row 1 (trk-2): Status has speaker icon, Track# is "2"
+        JLabel s1 = (JLabel) panel.getTable().getCellRenderer(1, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 0), false, false, 1, 0);
+        assertThat(s1.getIcon()).isNotNull();
+        assertThat(s1.getText()).isEmpty();
+        assertThat(s1.getToolTipText()).isEqualTo("Playing");
+        JLabel n1 = (JLabel) panel.getTable().getCellRenderer(1, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 1), false, false, 1, 1);
+        assertThat(n1.getText()).isEqualTo("2");
+
+        // Row 2 (trk-3): Status is empty, Track# is "-"
+        JLabel s2 = (JLabel) panel.getTable().getCellRenderer(2, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(2, 0), false, false, 2, 0);
+        assertThat(s2.getIcon()).isNull();
+        assertThat(s2.getText()).isEmpty();
+        JLabel n2 = (JLabel) panel.getTable().getCellRenderer(2, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(2, 1), false, false, 2, 1);
+        assertThat(n2.getText()).isEqualTo("-");
+
+        // State 3: Switch to PAUSED on trk-3
+        panel.setPlaybackStatus("trk-3", com.musiclibrary.model.PlaybackState.PAUSED);
+
+        // Row 1 (trk-2) is cleared
+        s1 = (JLabel) panel.getTable().getCellRenderer(1, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 0), false, false, 1, 0);
+        assertThat(s1.getIcon()).isNull();
+        n1 = (JLabel) panel.getTable().getCellRenderer(1, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 1), false, false, 1, 1);
+        assertThat(n1.getText()).isEqualTo("2");
+
+        // Row 2 (trk-3): Status has pause icon, Track# remains "-"
+        s2 = (JLabel) panel.getTable().getCellRenderer(2, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(2, 0), false, false, 2, 0);
+        assertThat(s2.getIcon()).isNotNull();
+        assertThat(s2.getText()).isEmpty();
+        assertThat(s2.getToolTipText()).isEqualTo("Paused");
+        n2 = (JLabel) panel.getTable().getCellRenderer(2, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(2, 1), false, false, 2, 1);
+        assertThat(n2.getText()).isEqualTo("-");
+
+        // State 4: STOPPED
+        panel.setPlaybackStatus(null, com.musiclibrary.model.PlaybackState.STOPPED);
+        s2 = (JLabel) panel.getTable().getCellRenderer(2, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(2, 0), false, false, 2, 0);
+        assertThat(s2.getIcon()).isNull();
+        n2 = (JLabel) panel.getTable().getCellRenderer(2, 1)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(2, 1), false, false, 2, 1);
+        assertThat(n2.getText()).isEqualTo("-");
+    }
+
+    @Test
+    @DisplayName("Track number column has 80px preferred width and displays localized header without text truncation")
+    void testTrackNumberColumnWidthAndHeaderLocalization() {
+        TrackTablePanel panel = new TrackTablePanel();
+        javax.swing.JTable table = panel.getTable();
+
+        // 1. Initial preferred width check
+        int trackNumViewIdx = table.convertColumnIndexToView(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TRACK_NUMBER);
+        assertThat(trackNumViewIdx).isEqualTo(1);
+        javax.swing.table.TableColumn trackCol = table.getColumnModel().getColumn(trackNumViewIdx);
+        assertThat(trackCol.getPreferredWidth()).isEqualTo(80);
+
+        // 2. Japanese locale header & context menu item
+        I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+        panel.updateLanguage();
+
+        assertThat(trackCol.getHeaderValue()).isEqualTo("トラック番号");
+        javax.swing.JCheckBoxMenuItem jaItem = panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TRACK_NUMBER];
+        assertThat(jaItem).isNotNull();
+        assertThat(jaItem.getText()).isEqualTo("トラック番号");
+
+        // Verify that 80px is sufficiently wide for the Japanese header text "トラック番号"
+        java.awt.Font headerFont = table.getTableHeader().getFont();
+        if (headerFont != null) {
+            java.awt.FontMetrics fm = table.getFontMetrics(headerFont);
+            int textWidth = fm.stringWidth("トラック番号");
+            // Standard font width for 6 Japanese characters is around 60-72px, well within 80px
+            assertThat(textWidth).isLessThan(80);
+        }
+
+        // 3. English locale header & context menu item
+        I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        panel.updateLanguage();
+
+        assertThat(trackCol.getHeaderValue()).isEqualTo("#");
+        javax.swing.JCheckBoxMenuItem enItem = panel.getColumnMenuItems()[com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TRACK_NUMBER];
+        assertThat(enItem).isNotNull();
+        assertThat(enItem.getText()).isEqualTo("#");
     }
 }
 

@@ -132,6 +132,10 @@ public class AlbumHeaderPanel extends JPanel {
         this.onBackAction = onBackAction;
     }
 
+    public JButton getBackButton() {
+        return backButton;
+    }
+
     public void updateLanguage() {
         updateBackButtonText();
         if (currentAlbum != null) {

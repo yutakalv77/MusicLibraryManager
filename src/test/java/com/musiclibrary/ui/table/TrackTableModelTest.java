@@ -28,60 +28,100 @@ class TrackTableModelTest {
     }
 
     @Test
-    @DisplayName("Model defines exactly 8 columns with localized names and precise numeric/text classes")
+    @DisplayName("Model defines exactly 15 columns with localized names and precise numeric/text/date classes")
     void testColumnDefinitionsAndClasses() {
-        assertThat(model.getColumnCount()).isEqualTo(8);
+        assertThat(model.getColumnCount()).isEqualTo(15);
 
-        // Column classes for natural TableRowSorter numeric comparison
+        // Column classes for natural TableRowSorter numeric/date comparison
+        assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_STATUS)).isEqualTo(Object.class);
         assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_TRACK_NUMBER)).isEqualTo(Integer.class);
         assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_TITLE)).isEqualTo(String.class);
         assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_ARTIST)).isEqualTo(String.class);
+        assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_ALBUM_ARTIST)).isEqualTo(String.class);
         assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_ALBUM)).isEqualTo(String.class);
         assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_DURATION)).isEqualTo(Long.class);
         assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_GENRE)).isEqualTo(String.class);
         assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_YEAR)).isEqualTo(Integer.class);
+        assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_DISC_NUMBER)).isEqualTo(Integer.class);
+        assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_BPM)).isEqualTo(Integer.class);
+        assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_BITRATE)).isEqualTo(Integer.class);
+        assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_DATE_ADDED)).isEqualTo(java.time.Instant.class);
+        assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_PLAY_COUNT)).isEqualTo(Integer.class);
         assertThat(model.getColumnClass(TrackTableModel.COLUMN_INDEX_RATING)).isEqualTo(Integer.class);
 
         // Column names (English)
-        assertThat(model.getColumnName(0)).isEqualTo("#");
-        assertThat(model.getColumnName(1)).isEqualTo("Title");
-        assertThat(model.getColumnName(2)).isEqualTo("Artist");
-        assertThat(model.getColumnName(3)).isEqualTo("Album");
-        assertThat(model.getColumnName(4)).isEqualTo("Time");
-        assertThat(model.getColumnName(5)).isEqualTo("Genre");
-        assertThat(model.getColumnName(6)).isEqualTo("Year");
-        assertThat(model.getColumnName(7)).isEqualTo("Rating");
+        assertThat(model.getColumnName(0)).isEqualTo("");
+        assertThat(model.getColumnName(1)).isEqualTo("#");
+        assertThat(model.getColumnName(2)).isEqualTo("Title");
+        assertThat(model.getColumnName(3)).isEqualTo("Artist");
+        assertThat(model.getColumnName(4)).isEqualTo("Album Artist");
+        assertThat(model.getColumnName(5)).isEqualTo("Album");
+        assertThat(model.getColumnName(6)).isEqualTo("Time");
+        assertThat(model.getColumnName(7)).isEqualTo("Genre");
+        assertThat(model.getColumnName(8)).isEqualTo("Year");
+        assertThat(model.getColumnName(9)).isEqualTo("Disc #");
+        assertThat(model.getColumnName(10)).isEqualTo("BPM");
+        assertThat(model.getColumnName(11)).isEqualTo("Bitrate");
+        assertThat(model.getColumnName(12)).isEqualTo("Date Added");
+        assertThat(model.getColumnName(13)).isEqualTo("Plays");
+        assertThat(model.getColumnName(14)).isEqualTo("Rating");
 
         // Column names (Japanese)
         I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
-        assertThat(model.getColumnName(0)).isEqualTo("番号");
-        assertThat(model.getColumnName(1)).isEqualTo("タイトル");
-        assertThat(model.getColumnName(4)).isEqualTo("時間");
+        assertThat(model.getColumnName(0)).isEqualTo("");
+        assertThat(model.getColumnName(1)).isEqualTo("トラック番号");
+        assertThat(model.getColumnName(2)).isEqualTo("タイトル");
+        assertThat(model.getColumnName(3)).isEqualTo("アーティスト");
+        assertThat(model.getColumnName(4)).isEqualTo("アルバムアーティスト");
+        assertThat(model.getColumnName(5)).isEqualTo("アルバム");
+        assertThat(model.getColumnName(6)).isEqualTo("時間");
+        assertThat(model.getColumnName(7)).isEqualTo("ジャンル");
+        assertThat(model.getColumnName(8)).isEqualTo("リリース年");
+        assertThat(model.getColumnName(9)).isEqualTo("ディスク番号");
+        assertThat(model.getColumnName(10)).isEqualTo("BPM");
+        assertThat(model.getColumnName(11)).isEqualTo("ビットレート");
+        assertThat(model.getColumnName(12)).isEqualTo("追加日");
+        assertThat(model.getColumnName(13)).isEqualTo("再生回数");
+        assertThat(model.getColumnName(14)).isEqualTo("レート");
     }
 
     @Test
-    @DisplayName("getValueAt returns typed raw values for model cells and null for out-of-bounds")
+    @DisplayName("getValueAt returns typed raw values for model cells across all 14 columns and null for out-of-bounds")
     void testGetValueAt() {
+        java.time.Instant now = java.time.Instant.parse("2026-10-14T10:15:30Z");
         Track track = Track.builder()
                 .filePath("C:/Music/test.mp3")
                 .trackNumber(7)
                 .title("A Day in the Life")
                 .artist("The Beatles")
+                .albumArtist("Beatles Complete")
                 .album("Sgt. Pepper")
                 .durationSeconds(335)
                 .genre("Rock")
                 .year(1967)
+                .discNumber(1)
+                .bpm(120)
+                .bitrate(320)
+                .dateAdded(now)
+                .playCount(15)
                 .rating(5)
                 .build();
         model.addTrack(track);
 
+        assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_STATUS)).isEqualTo("");
         assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_TRACK_NUMBER)).isEqualTo(7);
         assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_TITLE)).isEqualTo("A Day in the Life");
         assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_ARTIST)).isEqualTo("The Beatles");
+        assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_ALBUM_ARTIST)).isEqualTo("Beatles Complete");
         assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_ALBUM)).isEqualTo("Sgt. Pepper");
         assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_DURATION)).isEqualTo(335L);
         assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_GENRE)).isEqualTo("Rock");
         assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_YEAR)).isEqualTo(1967);
+        assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_DISC_NUMBER)).isEqualTo(1);
+        assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_BPM)).isEqualTo(120);
+        assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_BITRATE)).isEqualTo(320);
+        assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_DATE_ADDED)).isEqualTo(now);
+        assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_PLAY_COUNT)).isEqualTo(15);
         assertThat(model.getValueAt(0, TrackTableModel.COLUMN_INDEX_RATING)).isEqualTo(5);
 
         // Out of bounds
@@ -263,6 +303,50 @@ class TrackTableModelTest {
         assertThat(sorter.convertRowIndexToModel(0)).isEqualTo(1); // 10 (t2)
         assertThat(sorter.convertRowIndexToModel(1)).isEqualTo(0); // 2 (t1)
         assertThat(sorter.convertRowIndexToModel(2)).isEqualTo(2); // 1 (t3)
+    }
+
+    @Test
+    @DisplayName("TableRowSorter correctly sorts BPM, Bitrate, DiscNumber, and DateAdded columns")
+    void testNewColumnsSortingWithTableRowSorter() {
+        TableRowSorter<TrackTableModel> sorter = new TableRowSorter<>(model);
+
+        java.time.Instant time1 = java.time.Instant.parse("2024-01-01T00:00:00Z");
+        java.time.Instant time2 = java.time.Instant.parse("2025-06-01T00:00:00Z");
+        java.time.Instant time3 = java.time.Instant.parse("2023-12-01T00:00:00Z");
+
+        Track t1 = Track.builder().id("1").filePath("C:/1.mp3").discNumber(2).bpm(140).bitrate(256).dateAdded(time1).build();
+        Track t2 = Track.builder().id("2").filePath("C:/2.mp3").discNumber(1).bpm(80).bitrate(320).dateAdded(time2).build();
+        Track t3 = Track.builder().id("3").filePath("C:/3.mp3").discNumber(3).bpm(120).bitrate(128).dateAdded(time3).build();
+
+        model.addTracks(List.of(t1, t2, t3));
+
+        // Sort BPM ascending (80, 120, 140) -> t2, t3, t1
+        sorter.setSortKeys(List.of(new RowSorter.SortKey(TrackTableModel.COLUMN_INDEX_BPM, SortOrder.ASCENDING)));
+        sorter.sort();
+        assertThat(sorter.convertRowIndexToModel(0)).isEqualTo(1);
+        assertThat(sorter.convertRowIndexToModel(1)).isEqualTo(2);
+        assertThat(sorter.convertRowIndexToModel(2)).isEqualTo(0);
+
+        // Sort Bitrate ascending (128, 256, 320) -> t3, t1, t2
+        sorter.setSortKeys(List.of(new RowSorter.SortKey(TrackTableModel.COLUMN_INDEX_BITRATE, SortOrder.ASCENDING)));
+        sorter.sort();
+        assertThat(sorter.convertRowIndexToModel(0)).isEqualTo(2);
+        assertThat(sorter.convertRowIndexToModel(1)).isEqualTo(0);
+        assertThat(sorter.convertRowIndexToModel(2)).isEqualTo(1);
+
+        // Sort DiscNumber ascending (1, 2, 3) -> t2, t1, t3
+        sorter.setSortKeys(List.of(new RowSorter.SortKey(TrackTableModel.COLUMN_INDEX_DISC_NUMBER, SortOrder.ASCENDING)));
+        sorter.sort();
+        assertThat(sorter.convertRowIndexToModel(0)).isEqualTo(1);
+        assertThat(sorter.convertRowIndexToModel(1)).isEqualTo(0);
+        assertThat(sorter.convertRowIndexToModel(2)).isEqualTo(2);
+
+        // Sort DateAdded ascending (time3, time1, time2) -> t3, t1, t2
+        sorter.setSortKeys(List.of(new RowSorter.SortKey(TrackTableModel.COLUMN_INDEX_DATE_ADDED, SortOrder.ASCENDING)));
+        sorter.sort();
+        assertThat(sorter.convertRowIndexToModel(0)).isEqualTo(2);
+        assertThat(sorter.convertRowIndexToModel(1)).isEqualTo(0);
+        assertThat(sorter.convertRowIndexToModel(2)).isEqualTo(1);
     }
 
     @Test

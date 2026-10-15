@@ -23,6 +23,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import com.musiclibrary.service.importer.LibraryImportService.ImportTask;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1039,6 +1040,393 @@ class LibraryImportServiceTest {
         // Core requirement: extraction was short-circuited 100%, never called!
         assertThat(extractionCallCount.get()).isEqualTo(0);
         assertThat(library.getTrackCount()).isEqualTo(50);
+    }
+
+    @Test
+    @DisplayName("rescanAndImportAsync forces metadata re-extraction, updates new fields via upsertTrack, preserves user stats, and imports new tracks")
+    void testRescanAndImportForceMetadataRefresh() throws Exception {
+        Library library = new Library();
+        Path existingFile = Files.createFile(tempDir.resolve("existing_track.mp3"));
+        Path newFile = Files.createFile(tempDir.resolve("new_track.mp3"));
+
+        Instant fileModTime = Files.getLastModifiedTime(existingFile).toInstant();
+        Instant originalDateAdded = Instant.now().minusSeconds(86400);
+
+        Track existing = Track.builder()
+                .id("track-abc")
+                .filePath(existingFile.toAbsolutePath().normalize().toString())
+                .title("Initial Title")
+                .artist("Initial Artist")
+                .rating(5)
+                .playCount(42)
+                .dateAdded(originalDateAdded)
+                .lastModified(fileModTime) // Matches file modification time exactly
+                .bpm(0)
+                .bitrate(0)
+                .albumArtist("")
+                .discNumber(0)
+                .build();
+        library.addTrack(existing);
+
+        MetadataExtractor refreshingExtractor = new MetadataExtractor() {
+            @Override
+            public Track extract(Path filePath) {
+                if (filePath.equals(existingFile)) {
+                    return Track.builder()
+                            .filePath(filePath.toAbsolutePath().normalize().toString())
+                            .title("Updated Title")
+                            .artist("Updated Artist")
+                            .albumArtist("Updated Album Artist")
+                            .bpm(128)
+                            .bitrate(320)
+                            .discNumber(2)
+                            .genre("Electronic")
+                            .year(2026)
+                            .build();
+                } else {
+                    return Track.builder()
+                            .filePath(filePath.toAbsolutePath().normalize().toString())
+                            .title("New Song")
+                            .artist("New Artist")
+                            .bpm(90)
+                            .bitrate(256)
+                            .build();
+                }
+            }
+
+            @Override
+            public boolean supports(Path filePath) {
+                return true;
+            }
+        };
+
+        TestStorage mockStorage = new TestStorage();
+        LibraryImportService service = new LibraryImportService(
+                library,
+                mockStorage,
+                tempDir.resolve("library.json"),
+                new FileScanner(),
+                refreshingExtractor,
+                10
+        );
+
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<ImportResult> resultRef = new AtomicReference<>();
+
+        service.rescanAndImportAsync(tempDir, new ImportProgressListener() {
+            @Override public void onProgress(int processed, int total, String file) {}
+            @Override public void onBatchImported(List<Track> batch) {}
+            @Override public void onCompleted(int total) {}
+            @Override
+            public void onCompleted(ImportResult result) {
+                resultRef.set(result);
+                latch.countDown();
+            }
+            @Override public void onCancelled(int count) { latch.countDown(); }
+            @Override public void onError(Throwable error) { latch.countDown(); }
+        });
+
+        boolean finished = latch.await(5, TimeUnit.SECONDS);
+        assertThat(finished).isTrue();
+
+        ImportResult result = resultRef.get();
+        assertThat(result).isNotNull();
+        assertThat(result.updatedCount()).isEqualTo(1);
+        assertThat(result.addedCount()).isEqualTo(1);
+        assertThat(result.skippedCount()).isEqualTo(0);
+
+        assertThat(library.getTrackCount()).isEqualTo(2);
+
+        // Verify existing track was updated via upsertTrack, preserving user statistics
+        Track updatedTrack = library.getTrack("track-abc");
+        assertThat(updatedTrack).isNotNull();
+        assertThat(updatedTrack.getTitle()).isEqualTo("Updated Title");
+        assertThat(updatedTrack.getArtist()).isEqualTo("Updated Artist");
+        assertThat(updatedTrack.getAlbumArtist()).isEqualTo("Updated Album Artist");
+        assertThat(updatedTrack.getBpm()).isEqualTo(128);
+        assertThat(updatedTrack.getBitrate()).isEqualTo(320);
+        assertThat(updatedTrack.getDiscNumber()).isEqualTo(2);
+        assertThat(updatedTrack.getGenre()).isEqualTo("Electronic");
+        assertThat(updatedTrack.getYear()).isEqualTo(2026);
+
+        // Protected user statistics
+        assertThat(updatedTrack.getRating()).isEqualTo(5);
+        assertThat(updatedTrack.getPlayCount()).isEqualTo(42);
+        assertThat(updatedTrack.getDateAdded()).isEqualTo(originalDateAdded);
+
+        // Verify new track was added
+        Track newTrack = library.findByFilePath(newFile.toAbsolutePath().normalize().toString());
+        assertThat(newTrack).isNotNull();
+        assertThat(newTrack.getTitle()).isEqualTo("New Song");
+        assertThat(newTrack.getBpm()).isEqualTo(90);
+        assertThat(newTrack.getBitrate()).isEqualTo(256);
+
+        assertThat(mockStorage.saved).isTrue();
+    }
+
+    @Test
+    @DisplayName("rescanAndImportAsync cancels gracefully when task.cancel() is invoked")
+    void testRescanAndImportCancellation() throws Exception {
+        Library library = new Library();
+        // Create 20 dummy mp3 files
+        for (int i = 0; i < 20; i++) {
+            Files.createFile(tempDir.resolve("track_" + i + ".mp3"));
+        }
+
+        CountDownLatch firstExtracted = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicBoolean cancelledFired = new AtomicBoolean(false);
+
+        MetadataExtractor slowExtractor = new MetadataExtractor() {
+            @Override
+            public Track extract(Path filePath) {
+                firstExtracted.countDown();
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ignored) {}
+                return Track.builder().filePath(filePath.toString()).title("Song").build();
+            }
+
+            @Override
+            public boolean supports(Path filePath) {
+                return true;
+            }
+        };
+
+        LibraryImportService service = new LibraryImportService(
+                library,
+                new TestStorage(),
+                tempDir.resolve("library.json"),
+                new FileScanner(),
+                slowExtractor,
+                5
+        );
+
+        ImportTask task = service.rescanAndImportAsync(tempDir, new ImportProgressListener() {
+            @Override public void onProgress(int processed, int total, String file) {}
+            @Override public void onBatchImported(List<Track> batch) {}
+            @Override public void onCompleted(int total) { latch.countDown(); }
+            @Override public void onCompleted(ImportResult result) { latch.countDown(); }
+            @Override
+            public void onCancelled(int count) {
+                cancelledFired.set(true);
+                latch.countDown();
+            }
+            @Override public void onError(Throwable error) { latch.countDown(); }
+        });
+
+        // Wait for extraction to start, then cancel
+        assertThat(firstExtracted.await(5, TimeUnit.SECONDS)).isTrue();
+        task.cancel();
+
+        boolean completed = latch.await(5, TimeUnit.SECONDS);
+        assertThat(completed).isTrue();
+        assertThat(task.isCancelled()).isTrue();
+        assertThat(cancelledFired.get()).isTrue();
+    }
+
+    @Test
+    @DisplayName("rescanAndImportAsync safely handles empty directory, non-existent directory, and null paths")
+    void testRescanAndImportEmptyOrNonExistentDirectory() throws Exception {
+        Library library = new Library();
+        LibraryImportService service = new LibraryImportService(
+                library,
+                new TestStorage(),
+                tempDir.resolve("library.json"),
+                new FileScanner(),
+                new DummyMetadataExtractor(),
+                10
+        );
+
+        // 1. Empty directory
+        Path emptyDir = Files.createDirectory(tempDir.resolve("empty_folder"));
+        CountDownLatch latch1 = new CountDownLatch(1);
+        AtomicReference<ImportResult> result1 = new AtomicReference<>();
+        service.rescanAndImportAsync(emptyDir, new ImportProgressListener() {
+            @Override public void onProgress(int p, int t, String f) {}
+            @Override public void onBatchImported(List<Track> b) {}
+            @Override public void onCompleted(int total) {}
+            @Override
+            public void onCompleted(ImportResult result) {
+                result1.set(result);
+                latch1.countDown();
+            }
+            @Override public void onCancelled(int c) { latch1.countDown(); }
+            @Override public void onError(Throwable error) { latch1.countDown(); }
+        });
+        assertThat(latch1.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(result1.get()).isNotNull();
+        assertThat(result1.get().addedCount()).isEqualTo(0);
+        assertThat(result1.get().updatedCount()).isEqualTo(0);
+        assertThat(result1.get().skippedCount()).isEqualTo(0);
+
+        // 2. Non-existent directory
+        Path nonExistent = tempDir.resolve("does_not_exist_dir");
+        CountDownLatch latch2 = new CountDownLatch(1);
+        AtomicReference<ImportResult> result2 = new AtomicReference<>();
+        service.rescanAndImportAsync(nonExistent, new ImportProgressListener() {
+            @Override public void onProgress(int p, int t, String f) {}
+            @Override public void onBatchImported(List<Track> b) {}
+            @Override public void onCompleted(int total) {}
+            @Override
+            public void onCompleted(ImportResult result) {
+                result2.set(result);
+                latch2.countDown();
+            }
+            @Override public void onCancelled(int c) { latch2.countDown(); }
+            @Override public void onError(Throwable error) { latch2.countDown(); }
+        });
+        assertThat(latch2.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(result2.get()).isNotNull();
+        assertThat(result2.get().addedCount()).isEqualTo(0);
+        assertThat(result2.get().updatedCount()).isEqualTo(0);
+
+        // 3. Null rootPath
+        CountDownLatch latch3 = new CountDownLatch(1);
+        AtomicReference<ImportResult> result3 = new AtomicReference<>();
+        service.rescanAndImportAsync((Path) null, new ImportProgressListener() {
+            @Override public void onProgress(int p, int t, String f) {}
+            @Override public void onBatchImported(List<Track> b) {}
+            @Override public void onCompleted(int total) {}
+            @Override
+            public void onCompleted(ImportResult result) {
+                result3.set(result);
+                latch3.countDown();
+            }
+            @Override public void onCancelled(int c) { latch3.countDown(); }
+            @Override public void onError(Throwable error) { latch3.countDown(); }
+        });
+        assertThat(latch3.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(result3.get()).isNotNull();
+        assertThat(result3.get().addedCount()).isEqualTo(0);
+        assertThat(result3.get().updatedCount()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("rescan forces re-extraction even if disk file lastModified is in the past compared to library")
+    void testRescanAndImportPastLastModifiedRefresh() throws Exception {
+        Library library = new Library();
+        Path file = Files.createFile(tempDir.resolve("past_track.mp3"));
+
+        Instant now = Instant.now();
+        // Set library track's lastModified into the future
+        Track existing = Track.builder()
+                .id("past-id-1")
+                .filePath(file.toAbsolutePath().normalize().toString())
+                .title("Old Title")
+                .artist("Old Artist")
+                .rating(4)
+                .playCount(15)
+                .dateAdded(now.minusSeconds(1000))
+                .lastModified(now.plusSeconds(3600)) // Far in future compared to actual disk file
+                .bpm(0)
+                .build();
+        library.addTrack(existing);
+
+        AtomicInteger extractCount = new AtomicInteger(0);
+        MetadataExtractor extractor = new MetadataExtractor() {
+            @Override
+            public Track extract(Path filePath) {
+                extractCount.incrementAndGet();
+                return Track.builder()
+                        .filePath(filePath.toAbsolutePath().normalize().toString())
+                        .title("Refreshed Title")
+                        .artist("Refreshed Artist")
+                        .bpm(130)
+                        .bitrate(320)
+                        .build();
+            }
+
+            @Override
+            public boolean supports(Path filePath) {
+                return true;
+            }
+        };
+
+        LibraryImportService service = new LibraryImportService(
+                library,
+                new TestStorage(),
+                tempDir.resolve("lib.json"),
+                new FileScanner(),
+                extractor,
+                10
+        );
+
+        // 1. Normal scanAndImportAsync (forceMetadataRefresh = false): should SKIP because file is older than library lastModified
+        ImportTask normalTask = service.scanAndImportAsync(file, null);
+        ImportResult normalResult = normalTask.getResultFuture().get(5, TimeUnit.SECONDS);
+        assertThat(normalResult.skippedCount()).isEqualTo(1);
+        assertThat(normalResult.updatedCount()).isEqualTo(0);
+        assertThat(extractCount.get()).isEqualTo(0); // Extraction was skipped!
+
+        // 2. rescanAndImportAsync (forceMetadataRefresh = true): must FORCE re-extraction and update
+        ImportTask rescanTask = service.rescanAndImportAsync(file, null);
+        ImportResult rescanResult = rescanTask.getResultFuture().get(5, TimeUnit.SECONDS);
+        assertThat(rescanResult.updatedCount()).isEqualTo(1);
+        assertThat(rescanResult.skippedCount()).isEqualTo(0);
+        assertThat(extractCount.get()).isEqualTo(1); // Forced extraction executed!
+
+        Track updated = library.getTrack("past-id-1");
+        assertThat(updated.getTitle()).isEqualTo("Refreshed Title");
+        assertThat(updated.getBpm()).isEqualTo(130);
+        assertThat(updated.getBitrate()).isEqualTo(320);
+        assertThat(updated.getRating()).isEqualTo(4); // Preserved
+        assertThat(updated.getPlayCount()).isEqualTo(15); // Preserved
+    }
+
+    @Test
+    @DisplayName("rescanAndImportAsync collection overload rescans multiple paths and imports new tracks")
+    void testRescanMultiplePathsCollectionOverload() throws Exception {
+        Library library = new Library();
+
+        Path dir1 = Files.createDirectory(tempDir.resolve("dir1"));
+        Path dir2 = Files.createDirectory(tempDir.resolve("dir2"));
+
+        Path file1 = Files.createFile(dir1.resolve("song1.mp3"));
+        Path file2 = Files.createFile(dir2.resolve("song2.mp3"));
+
+        // Register file1 in library with 0 BPM
+        library.addTrack(Track.builder()
+                .id("id-dir1")
+                .filePath(file1.toAbsolutePath().normalize().toString())
+                .title("Song 1")
+                .bpm(0)
+                .build());
+
+        MetadataExtractor extractor = new MetadataExtractor() {
+            @Override
+            public Track extract(Path filePath) {
+                return Track.builder()
+                        .filePath(filePath.toAbsolutePath().normalize().toString())
+                        .title(filePath.getFileName().toString())
+                        .bpm(125)
+                        .build();
+            }
+
+            @Override
+            public boolean supports(Path filePath) {
+                return true;
+            }
+        };
+
+        LibraryImportService service = new LibraryImportService(
+                library,
+                new TestStorage(),
+                tempDir.resolve("lib.json"),
+                new FileScanner(),
+                extractor,
+                10
+        );
+
+        ImportTask task = service.rescanAndImportAsync(List.of(dir1, dir2), null);
+        ImportResult result = task.getResultFuture().get(5, TimeUnit.SECONDS);
+
+        assertThat(result.updatedCount()).isEqualTo(1); // song1 updated
+        assertThat(result.addedCount()).isEqualTo(1);   // song2 added
+        assertThat(library.getTrackCount()).isEqualTo(2);
+
+        Track updatedSong1 = library.getTrack("id-dir1");
+        assertThat(updatedSong1.getBpm()).isEqualTo(125);
     }
 
     // --- Test Doubles ---

@@ -43,6 +43,8 @@ public class AlbumGridViewPanel extends JPanel {
 
     private int renderedCount = 0;
     private boolean isLoadingChunk = false;
+    private int savedScrollPosition = 0;
+    private Album lastSelectedAlbum = null;
 
     public AlbumGridViewPanel() {
         this(DEFAULT_CHUNK_SIZE);
@@ -75,14 +77,40 @@ public class AlbumGridViewPanel extends JPanel {
 
     /**
      * Sets the full album collection and resets any active filters.
+     * Scroll position is reset to 0.
      *
      * @param albums full collection of albums
      */
     public void setAlbums(List<Album> albums) {
-        this.allAlbums = (albums != null) ? List.copyOf(albums) : Collections.emptyList();
+        setAlbums(albums, false);
+    }
+
+    /**
+     * Sets the full album collection and resets any active filters.
+     * If preserveScroll is true, attempts to restore the saved scroll position without resetting to 0.
+     *
+     * @param albums full collection of albums
+     * @param preserveScroll whether to preserve and restore the saved scroll position
+     */
+    public void setAlbums(List<Album> albums, boolean preserveScroll) {
+        List<Album> newAlbums = (albums != null) ? List.copyOf(albums) : Collections.emptyList();
+        boolean sameContent = this.allAlbums.equals(newAlbums);
+
+        this.allAlbums = newAlbums;
         this.displayedAlbums = this.allAlbums;
-        renderCards();
-        scrollPane.getVerticalScrollBar().setValue(0);
+
+        if (preserveScroll && sameContent && renderedCount > 0) {
+            restoreScrollPosition();
+        } else {
+            renderCards();
+            if (preserveScroll) {
+                restoreScrollPosition();
+            } else {
+                savedScrollPosition = 0;
+                lastSelectedAlbum = null;
+                scrollPane.getVerticalScrollBar().setValue(0);
+            }
+        }
     }
 
     /**
@@ -213,5 +241,133 @@ public class AlbumGridViewPanel extends JPanel {
             emptyText = "No albums found.";
         }
         emptyLabel.setText(emptyText);
+    }
+
+    /**
+     * Saves the current vertical scroll position.
+     */
+    public void saveScrollPosition() {
+        this.savedScrollPosition = scrollPane.getVerticalScrollBar().getValue();
+    }
+
+    /**
+     * Saves the current vertical scroll position and the selected album.
+     *
+     * @param album album selected before navigating away
+     */
+    public void saveScrollPosition(Album album) {
+        saveScrollPosition();
+        this.lastSelectedAlbum = album;
+    }
+
+    /**
+     * Restores the previously saved scroll position and ensures the last selected album
+     * (or saved scroll offset) is visible, loading chunks if necessary.
+     */
+    public void restoreScrollPosition() {
+        if (displayedAlbums.isEmpty()) {
+            return;
+        }
+
+        // 1. If lastSelectedAlbum is present, make sure chunks up to its index are loaded
+        if (lastSelectedAlbum != null) {
+            int targetIndex = -1;
+            for (int i = 0; i < displayedAlbums.size(); i++) {
+                Album a = displayedAlbums.get(i);
+                if (a.equals(lastSelectedAlbum) ||
+                        (a.getTitle().equalsIgnoreCase(lastSelectedAlbum.getTitle()) &&
+                         a.getArtist().equalsIgnoreCase(lastSelectedAlbum.getArtist()))) {
+                    targetIndex = i;
+                    break;
+                }
+            }
+            if (targetIndex >= 0) {
+                while (renderedCount <= targetIndex && renderedCount < displayedAlbums.size()) {
+                    loadNextChunk();
+                }
+            }
+        }
+
+        // 2. If savedScrollPosition > 0, make sure sufficient chunks are loaded
+        if (savedScrollPosition > 0) {
+            while (renderedCount < displayedAlbums.size() &&
+                    (scrollPane.getVerticalScrollBar().getMaximum() - scrollPane.getVerticalScrollBar().getVisibleAmount()) < savedScrollPosition) {
+                int before = renderedCount;
+                loadNextChunk();
+                if (renderedCount == before) {
+                    break;
+                }
+            }
+        }
+
+        cardsPanel.validate();
+        scrollPane.validate();
+
+        // 3. Apply scroll position
+        if (savedScrollPosition > 0) {
+            scrollPane.getVerticalScrollBar().setValue(savedScrollPosition);
+        }
+
+        SwingUtilities.invokeLater(() -> {
+            if (savedScrollPosition > 0) {
+                scrollPane.getVerticalScrollBar().setValue(savedScrollPosition);
+            }
+        });
+    }
+
+    /**
+     * Ensures the specified album card is rendered and scrolled into view.
+     *
+     * @param album album to scroll into view
+     */
+    public void scrollToAlbum(Album album) {
+        if (album == null || displayedAlbums.isEmpty()) {
+            return;
+        }
+        int targetIndex = -1;
+        for (int i = 0; i < displayedAlbums.size(); i++) {
+            Album a = displayedAlbums.get(i);
+            if (a.equals(album) ||
+                    (a.getTitle().equalsIgnoreCase(album.getTitle()) &&
+                     a.getArtist().equalsIgnoreCase(album.getArtist()))) {
+                targetIndex = i;
+                break;
+            }
+        }
+        if (targetIndex >= 0) {
+            while (renderedCount <= targetIndex && renderedCount < displayedAlbums.size()) {
+                loadNextChunk();
+            }
+            cardsPanel.validate();
+            for (AlbumCardPanel card : cardPanels) {
+                if (card.getAlbum() != null &&
+                        (card.getAlbum().equals(album) ||
+                         (card.getAlbum().getTitle().equalsIgnoreCase(album.getTitle()) &&
+                          card.getAlbum().getArtist().equalsIgnoreCase(album.getArtist())))) {
+                    cardsPanel.scrollRectToVisible(card.getBounds());
+                    break;
+                }
+            }
+        }
+    }
+
+    public int getSavedScrollPosition() {
+        return savedScrollPosition;
+    }
+
+    public void setSavedScrollPosition(int savedScrollPosition) {
+        this.savedScrollPosition = Math.max(0, savedScrollPosition);
+    }
+
+    public Album getLastSelectedAlbum() {
+        return lastSelectedAlbum;
+    }
+
+    public void setLastSelectedAlbum(Album lastSelectedAlbum) {
+        this.lastSelectedAlbum = lastSelectedAlbum;
+    }
+
+    public JScrollPane getScrollPane() {
+        return scrollPane;
     }
 }

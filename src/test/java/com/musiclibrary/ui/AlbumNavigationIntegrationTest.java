@@ -245,4 +245,146 @@ class AlbumNavigationIntegrationTest {
         List<Album> a4 = mainFrame.getOrComputeAlbums();
         assertThat(a4).hasSize(3);
     }
+
+    @Test
+    @DisplayName("Album detail back button restores scroll position and selected album smoothly")
+    void testAlbumDetailBackButtonRestoresScrollPositionAndSelectedAlbum() {
+        // Populate library with multiple albums
+        for (int i = 0; i < 40; i++) {
+            Track t = Track.builder()
+                    .id("bulk_" + i)
+                    .filePath("bulk_" + i + ".mp3")
+                    .title("Track " + i)
+                    .artist("Artist " + (i % 5))
+                    .album("Bulk Album " + i)
+                    .build();
+            library.addTrack(t);
+        }
+        mainFrame.refreshLibraryView();
+
+        // Navigate to ALBUMS
+        mainFrame.getSidebarPanel().selectSection(SidebarPanel.LibrarySection.ALBUMS);
+        var gridPanel = mainFrame.getAlbumGridViewPanel();
+        assertThat(gridPanel.getAllAlbums().size()).isGreaterThanOrEqualTo(40);
+
+        // Simulate scrolling down to non-zero position and selecting an album
+        int maxScroll = gridPanel.getScrollPane().getVerticalScrollBar().getMaximum() - gridPanel.getScrollPane().getVerticalScrollBar().getVisibleAmount();
+        int targetScroll = Math.max(20, maxScroll);
+        gridPanel.getScrollPane().getVerticalScrollBar().setValue(targetScroll);
+        int expectedScroll = gridPanel.getScrollPane().getVerticalScrollBar().getValue();
+        assertThat(expectedScroll).isGreaterThan(0);
+
+        Album targetAlbum = gridPanel.getAllAlbums().get(15);
+
+        // Open album detail
+        mainFrame.openAlbumDetail(targetAlbum);
+
+        assertThat(mainFrame.isAlbumGridActive()).isFalse();
+        assertThat(mainFrame.getAlbumHeaderPanel().isVisible()).isTrue();
+        assertThat(gridPanel.getSavedScrollPosition()).isEqualTo(expectedScroll);
+        assertThat(gridPanel.getLastSelectedAlbum()).isEqualTo(targetAlbum);
+
+        // Click Back button on header panel
+        mainFrame.getAlbumHeaderPanel().getBackButton().doClick();
+
+        // Verify restoration
+        assertThat(mainFrame.isAlbumGridActive()).isTrue();
+        assertThat(mainFrame.getAlbumHeaderPanel().isVisible()).isFalse();
+        assertThat(gridPanel.getSavedScrollPosition()).isEqualTo(expectedScroll);
+        assertThat(gridPanel.getLastSelectedAlbum()).isEqualTo(targetAlbum);
+    }
+
+    @Test
+    @DisplayName("Sidebar ALBUMS re-click resets scroll position to zero whereas back button preserves it")
+    void testSidebarAlbumsClickResetsScrollPositionWhereasBackButtonRestoresIt() {
+        for (int i = 0; i < 30; i++) {
+            Track t = Track.builder()
+                    .id("scroll_" + i)
+                    .filePath("s_" + i + ".mp3")
+                    .title("Song " + i)
+                    .artist("Artist")
+                    .album("Album " + i)
+                    .build();
+            library.addTrack(t);
+        }
+        mainFrame.refreshLibraryView();
+
+        mainFrame.getSidebarPanel().selectSection(SidebarPanel.LibrarySection.ALBUMS);
+        var gridPanel = mainFrame.getAlbumGridViewPanel();
+
+        // 1. Set scroll position within scrollbar bounds and open detail
+        int maxScroll = gridPanel.getScrollPane().getVerticalScrollBar().getMaximum() - gridPanel.getScrollPane().getVerticalScrollBar().getVisibleAmount();
+        int targetScroll = Math.max(20, maxScroll);
+        gridPanel.getScrollPane().getVerticalScrollBar().setValue(targetScroll);
+        int expectedScroll = gridPanel.getScrollPane().getVerticalScrollBar().getValue();
+        assertThat(expectedScroll).isGreaterThan(0);
+
+        Album target = gridPanel.getAllAlbums().get(10);
+        mainFrame.openAlbumDetail(target);
+
+        // 2. Click Back button: scroll position is preserved
+        mainFrame.returnFromAlbumDetail();
+        assertThat(mainFrame.isAlbumGridActive()).isTrue();
+        assertThat(gridPanel.getSavedScrollPosition()).isEqualTo(expectedScroll);
+        assertThat(gridPanel.getLastSelectedAlbum()).isEqualTo(target);
+
+        // 3. Re-select ALBUMS from sidebar: scroll position is reset to 0
+        mainFrame.getSidebarPanel().selectSection(SidebarPanel.LibrarySection.ALBUMS);
+        assertThat(gridPanel.getSavedScrollPosition()).isEqualTo(0);
+        assertThat(gridPanel.getLastSelectedAlbum()).isNull();
+        assertThat(gridPanel.getScrollPane().getVerticalScrollBar().getValue()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("Returning from album detail automatically expands lazy chunks up to the selected album")
+    void testRestoreScrollWithLazyChunkExpansionIntegration() {
+        // Create 80 albums
+        for (int i = 0; i < 80; i++) {
+            Track t = Track.builder()
+                    .id("lazy_" + i)
+                    .filePath("lazy_" + i + ".mp3")
+                    .title("Lazy Song " + i)
+                    .artist("Band " + (i % 3))
+                    .album(String.format("Album %02d", i))
+                    .build();
+            library.addTrack(t);
+        }
+        mainFrame.refreshLibraryView();
+
+        mainFrame.getSidebarPanel().selectSection(SidebarPanel.LibrarySection.ALBUMS);
+        var gridPanel = mainFrame.getAlbumGridViewPanel();
+
+        // Target album deep in the collection (index 55)
+        Album deepAlbum = gridPanel.getAllAlbums().get(55);
+
+        // Navigate to detail of deep album
+        gridPanel.setSavedScrollPosition(400);
+        mainFrame.openAlbumDetail(deepAlbum);
+
+        // Return from detail
+        mainFrame.returnFromAlbumDetail();
+
+        // Chunks must be expanded so that index 55 is rendered (at least 56 cards)
+        assertThat(gridPanel.getRenderedCardCount()).isGreaterThanOrEqualTo(56);
+        assertThat(gridPanel.getLastSelectedAlbum()).isEqualTo(deepAlbum);
+    }
+
+    @Test
+    @DisplayName("showAlbumGrid with restoreScroll=true avoids re-creating cards when album list is unchanged")
+    void testUnchangedAlbumsSkipsReRenderingOnReturn() {
+        mainFrame.getSidebarPanel().selectSection(SidebarPanel.LibrarySection.ALBUMS);
+        var gridPanel = mainFrame.getAlbumGridViewPanel();
+
+        int initialRenderedCount = gridPanel.getRenderedCardCount();
+        Album albumToOpen = gridPanel.getAllAlbums().get(0);
+
+        mainFrame.openAlbumDetail(albumToOpen);
+
+        // Call showAlbumGrid(true)
+        mainFrame.showAlbumGrid(true);
+
+        // Rendered cards count should not be wiped or reset
+        assertThat(gridPanel.getRenderedCardCount()).isEqualTo(initialRenderedCount);
+        assertThat(mainFrame.isAlbumGridActive()).isTrue();
+    }
 }
