@@ -6,6 +6,7 @@ import javazoom.jl.player.AudioDeviceBase;
 
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.BooleanControl;
 import javax.sound.sampled.DataLine;
 import javax.sound.sampled.FloatControl;
 import javax.sound.sampled.LineUnavailableException;
@@ -36,12 +37,29 @@ public class VolumeAudioDevice extends AudioDeviceBase {
 
     /**
      * Sets linear volume in range [0.0f, 1.0f] and applies it to the active line.
+     * When transitioning across the mute boundary (volume <= 0.001f <-> non-zero),
+     * the audio line buffer is immediately flushed so that silence or audio output
+     * commences instantly without buffered latency.
      *
      * @param volume target volume
      */
     public void setVolume(float volume) {
-        this.volume = Math.max(0.0f, Math.min(1.0f, volume));
+        float clamped = Math.max(0.0f, Math.min(1.0f, volume));
+        boolean wasMuted = this.volume <= 0.001f;
+        boolean nowMuted = clamped <= 0.001f;
+        this.volume = clamped;
         applyVolume();
+
+        if (wasMuted != nowMuted) {
+            SourceDataLine line = this.source;
+            if (line != null && line.isOpen()) {
+                try {
+                    line.flush();
+                } catch (Exception e) {
+                    LOGGER.log(System.Logger.Level.DEBUG, "Failed to flush audio line on mute transition", e);
+                }
+            }
+        }
     }
 
     /**
@@ -117,7 +135,21 @@ public class VolumeAudioDevice extends AudioDeviceBase {
             }
             DataLine.Info info = new DataLine.Info(SourceDataLine.class, fmt);
             source = (SourceDataLine) AudioSystem.getLine(info);
-            source.open(fmt);
+
+            // Open with low-latency buffer (~100ms, aligned to at least 4 JLayer frames)
+            int frameSize = fmt.getFrameSize() > 0 ? fmt.getFrameSize() : 4;
+            float sampleRate = fmt.getSampleRate() > 0 ? fmt.getSampleRate() : 44100.0f;
+            int jlayerFrameBytes = 1152 * frameSize;
+            int minBuffer = jlayerFrameBytes * 4;
+            int calculatedBuffer = (int) (sampleRate * frameSize * 0.100f);
+            int bufferSize = Math.max(minBuffer, calculatedBuffer);
+            bufferSize = (bufferSize / frameSize) * frameSize;
+
+            try {
+                source.open(fmt, bufferSize);
+            } catch (Exception e) {
+                source.open(fmt);
+            }
             source.start();
             applyVolume();
         } catch (RuntimeException | LinkageError | LineUnavailableException e) {
@@ -128,12 +160,21 @@ public class VolumeAudioDevice extends AudioDeviceBase {
 
     private void applyVolume() {
         if (source != null && source.isOpen()) {
+            boolean isMuted = volume <= 0.001f;
+            try {
+                if (source.isControlSupported(BooleanControl.Type.MUTE)) {
+                    BooleanControl muteControl = (BooleanControl) source.getControl(BooleanControl.Type.MUTE);
+                    muteControl.setValue(isMuted);
+                }
+            } catch (Exception ignored) {
+            }
+
             try {
                 if (source.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
                     FloatControl gainControl = (FloatControl) source.getControl(FloatControl.Type.MASTER_GAIN);
                     float min = gainControl.getMinimum();
                     float max = Math.min(0.0f, gainControl.getMaximum());
-                    if (volume <= 0.001f) {
+                    if (isMuted) {
                         gainControl.setValue(min);
                     } else {
                         // Decibel conversion: 20 * log10(volume)

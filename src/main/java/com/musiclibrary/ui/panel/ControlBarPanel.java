@@ -5,8 +5,6 @@ import com.musiclibrary.model.PlaybackState;
 import com.musiclibrary.model.RepeatMode;
 import com.musiclibrary.model.Track;
 import com.musiclibrary.service.cache.ArtworkCache;
-import com.musiclibrary.theme.ThemeChangeListener;
-import com.musiclibrary.theme.ThemeManager;
 import com.musiclibrary.util.TimeFormatter;
 
 import javax.swing.BorderFactory;
@@ -18,17 +16,30 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.JTextField;
+import javax.swing.JToolTip;
+import javax.swing.Popup;
+import javax.swing.PopupFactory;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GraphicsEnvironment;
 import java.awt.Image;
+import java.awt.Insets;
+import java.awt.Point;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.function.LongConsumer;
 
 /**
  * Top control bar panel containing playback transport controls,
- * volume slider, LCD-style track display, search field, and theme toggle.
+ * volume slider, LCD-style track display, and search field.
  */
 @SuppressWarnings({"this-escape"})
 public class ControlBarPanel extends JPanel {
@@ -39,7 +50,10 @@ public class ControlBarPanel extends JPanel {
     private final JButton nextButton;
     private final JButton shuffleButton;
     private final JButton repeatButton;
+    private final JButton muteButton;
     private final JSlider volumeSlider;
+    private transient Popup dragPopup = null;
+    private transient JToolTip dragToolTip = null;
 
     // LCD display panel components
     private final JPanel lcdPanel;
@@ -51,11 +65,8 @@ public class ControlBarPanel extends JPanel {
 
     // Search and utility components
     private final JTextField searchField;
-    private final JButton themeToggleButton;
-    private final JButton miniPlayerButton;
 
     private PlaybackState currentPlaybackState = PlaybackState.STOPPED;
-    private final ThemeChangeListener themeChangeListener;
 
     private volatile long currentTotalSeconds = 0;
     private boolean isUpdatingProgress = false;
@@ -65,6 +76,8 @@ public class ControlBarPanel extends JPanel {
     private RepeatMode repeatMode = RepeatMode.OFF;
     private Runnable shuffleToggleListener = null;
     private Runnable repeatCycleListener = null;
+
+    private int previousNonZeroVolume = 70;
 
     public ControlBarPanel() {
         setLayout(new BorderLayout(15, 0));
@@ -98,9 +111,73 @@ public class ControlBarPanel extends JPanel {
             }
         });
 
-        // Volume slider
-        volumeSlider = new JSlider(0, 100, 70);
-        volumeSlider.setPreferredSize(new Dimension(85, 24));
+        // Mute button & Volume slider
+        muteButton = new JButton("🔊");
+        muteButton.putClientProperty("JButton.buttonType", "toolBarButton");
+        muteButton.setPreferredSize(new Dimension(30, 28));
+        muteButton.setFocusable(false);
+        muteButton.setMargin(new Insets(0, 0, 0, 0));
+        muteButton.addActionListener(e -> toggleMute());
+
+        volumeSlider = new JSlider(0, 100, 70) {
+            @Override
+            public String getToolTipText() {
+                if (getValueIsAdjusting()) {
+                    return String.valueOf(getValue());
+                }
+                return super.getToolTipText();
+            }
+
+            @Override
+            public String getToolTipText(MouseEvent event) {
+                if (getValueIsAdjusting()) {
+                    return String.valueOf(getValue());
+                }
+                return super.getToolTipText(event);
+            }
+        };
+        volumeSlider.setPreferredSize(new Dimension(102, 24));
+        volumeSlider.addChangeListener(e -> {
+            updateMuteButtonState();
+            if (volumeSlider.getValueIsAdjusting() && dragPopup != null) {
+                updateDragTooltip();
+            }
+        });
+
+        MouseAdapter volumeDragListener = new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    updateDragTooltip();
+                }
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                updateDragTooltip();
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                hideDragTooltip();
+            }
+        };
+        volumeSlider.addMouseListener(volumeDragListener);
+        volumeSlider.addMouseMotionListener(volumeDragListener);
+
+        volumeSlider.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                hideDragTooltip();
+            }
+        });
+
+        volumeSlider.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentHidden(ComponentEvent e) {
+                hideDragTooltip();
+            }
+        });
 
         transportPanel.add(prevButton);
         transportPanel.add(playPauseButton);
@@ -109,6 +186,7 @@ public class ControlBarPanel extends JPanel {
         transportPanel.add(shuffleButton);
         transportPanel.add(repeatButton);
         transportPanel.add(Box.createHorizontalStrut(4));
+        transportPanel.add(muteButton);
         transportPanel.add(volumeSlider);
 
         add(transportPanel, BorderLayout.WEST);
@@ -180,7 +258,7 @@ public class ControlBarPanel extends JPanel {
         lcdPanel.add(trackInfoPanel, BorderLayout.CENTER);
         add(lcdPanel, BorderLayout.CENTER);
 
-        // 3. Right: Search & Actions Panel
+        // 3. Right: Search Panel
         JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 4));
 
         searchField = new JTextField(15);
@@ -188,33 +266,73 @@ public class ControlBarPanel extends JPanel {
         // FlatLaf placeholder and clear button properties
         searchField.putClientProperty("JTextField.showClearButton", true);
 
-        themeToggleButton = new JButton();
-        themeToggleButton.setPreferredSize(new Dimension(36, 30));
-        themeToggleButton.addActionListener(e -> ThemeManager.getInstance().toggleTheme());
-
-        miniPlayerButton = new JButton("⤢");
-        miniPlayerButton.setPreferredSize(new Dimension(36, 30));
-
         rightPanel.add(searchField);
-        rightPanel.add(themeToggleButton);
-        rightPanel.add(miniPlayerButton);
 
         add(rightPanel, BorderLayout.EAST);
 
         updateLanguage();
-        updateThemeIcon();
-
-        // Listen for theme changes to update theme toggle button icon
-        themeChangeListener = theme -> updateThemeIcon();
-        ThemeManager.getInstance().addThemeChangeListener(themeChangeListener);
     }
 
     /**
      * Releases listeners to prevent memory leaks when disposing the panel.
      */
     public void dispose() {
-        if (themeChangeListener != null) {
-            ThemeManager.getInstance().removeThemeChangeListener(themeChangeListener);
+        hideDragTooltip();
+    }
+
+    /**
+     * Updates and positions the real-time volume value tooltip above the slider thumb during drag operations.
+     */
+    private void updateDragTooltip() {
+        if (GraphicsEnvironment.isHeadless() || !volumeSlider.isShowing()) {
+            hideDragTooltip();
+            return;
+        }
+
+        try {
+            if (dragToolTip == null) {
+                dragToolTip = volumeSlider.createToolTip();
+            }
+            dragToolTip.setTipText(String.valueOf(volumeSlider.getValue()));
+
+            hideDragTooltip();
+
+            Point sliderScreenPos = new Point(0, 0);
+            SwingUtilities.convertPointToScreen(sliderScreenPos, volumeSlider);
+
+            Dimension tipSize = dragToolTip.getPreferredSize();
+            int width = volumeSlider.getWidth();
+            if (width <= 0) {
+                width = volumeSlider.getPreferredSize().width;
+            }
+            int thumbInset = 8;
+            int usableWidth = Math.max(1, width - thumbInset * 2);
+            int min = volumeSlider.getMinimum();
+            int max = volumeSlider.getMaximum();
+            int range = Math.max(1, max - min);
+            int thumbX = thumbInset + (int) Math.round(((double) (volumeSlider.getValue() - min) / range) * usableWidth);
+
+            int popupX = sliderScreenPos.x + thumbX - (tipSize.width / 2);
+            int popupY = sliderScreenPos.y - tipSize.height - 2;
+
+            PopupFactory factory = PopupFactory.getSharedInstance();
+            dragPopup = factory.getPopup(volumeSlider, dragToolTip, popupX, popupY);
+            dragPopup.show();
+        } catch (Exception e) {
+            hideDragTooltip();
+        }
+    }
+
+    /**
+     * Hides and cleans up the drag volume tooltip popup if currently visible.
+     */
+    private void hideDragTooltip() {
+        if (dragPopup != null) {
+            try {
+                dragPopup.hide();
+            } catch (Exception ignored) {
+            }
+            dragPopup = null;
         }
     }
 
@@ -229,6 +347,7 @@ public class ControlBarPanel extends JPanel {
         updatePlayPauseButtonText();
         shuffleButton.setToolTipText(i18n.get("control.shuffle"));
         repeatButton.setToolTipText(getRepeatToolTipText(repeatMode, i18n));
+        updateMuteButtonState();
         volumeSlider.setToolTipText(i18n.get("control.volume"));
 
         if (trackTitleLabel.getText() == null || trackTitleLabel.getText().isBlank()
@@ -239,16 +358,8 @@ public class ControlBarPanel extends JPanel {
         searchField.putClientProperty("JTextField.placeholderText", i18n.get("control.search_placeholder"));
         searchField.setToolTipText(i18n.get("control.search_placeholder"));
 
-        themeToggleButton.setToolTipText(i18n.get("menu.view.theme"));
-        miniPlayerButton.setToolTipText(i18n.get("menu.view.mini_player"));
-
         revalidate();
         repaint();
-    }
-
-    private void updateThemeIcon() {
-        boolean dark = ThemeManager.getInstance().isDarkMode();
-        themeToggleButton.setText(dark ? "☀️" : "🌙");
     }
 
     private void updatePlayPauseButtonText() {
@@ -450,6 +561,35 @@ public class ControlBarPanel extends JPanel {
         };
     }
 
+    /**
+     * Toggles mute state between zero volume and the previous non-zero volume.
+     */
+    private void toggleMute() {
+        int currentVolume = volumeSlider.getValue();
+        if (currentVolume > 0) {
+            previousNonZeroVolume = currentVolume;
+            volumeSlider.setValue(0);
+        } else {
+            volumeSlider.setValue(previousNonZeroVolume > 0 ? previousNonZeroVolume : 70);
+        }
+    }
+
+    /**
+     * Synchronizes mute button icon and tooltip with the current volume slider value.
+     */
+    private void updateMuteButtonState() {
+        int val = volumeSlider.getValue();
+        I18nManager i18n = I18nManager.getInstance();
+        if (val == 0) {
+            muteButton.setText("🔇");
+            muteButton.setToolTipText(i18n.get("control.unmute"));
+        } else {
+            previousNonZeroVolume = val;
+            muteButton.setText("🔊");
+            muteButton.setToolTipText(i18n.get("control.mute"));
+        }
+    }
+
     public void setShuffleToggleListener(Runnable shuffleToggleListener) {
         this.shuffleToggleListener = shuffleToggleListener;
     }
@@ -488,6 +628,14 @@ public class ControlBarPanel extends JPanel {
         return repeatButton;
     }
 
+    public JButton getMuteButton() {
+        return muteButton;
+    }
+
+    public int getPreviousNonZeroVolume() {
+        return previousNonZeroVolume;
+    }
+
     public JSlider getVolumeSlider() {
         return volumeSlider;
     }
@@ -498,14 +646,6 @@ public class ControlBarPanel extends JPanel {
 
     public JTextField getSearchField() {
         return searchField;
-    }
-
-    public JButton getThemeToggleButton() {
-        return themeToggleButton;
-    }
-
-    public JButton getMiniPlayerButton() {
-        return miniPlayerButton;
     }
 
     public JLabel getCurrentTimeLabel() {

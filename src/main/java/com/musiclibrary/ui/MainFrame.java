@@ -438,7 +438,6 @@ public class MainFrame extends JFrame {
 
         // 5. Setup Mini Player Frame
         this.miniPlayerFrame = new MiniPlayerFrame(this.playerController, this::restoreFromMiniPlayer);
-        this.controlBarPanel.getMiniPlayerButton().addActionListener(e -> switchToMiniPlayer());
 
         // 6. Setup Split Pane (Sidebar + Main Content)
         splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, sidebarPanel, mainContentPanel);

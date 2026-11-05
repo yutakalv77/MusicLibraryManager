@@ -9,10 +9,25 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Point;
+import java.awt.event.ComponentEvent;
+import java.awt.event.FocusEvent;
+import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import javax.imageio.ImageIO;
+import javax.swing.JButton;
+import javax.swing.JPanel;
+import javax.swing.JSlider;
+import javax.swing.SwingUtilities;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -45,9 +60,6 @@ class ControlBarPanelTest {
 
         assertThat(panel.getSearchField()).isNotNull();
         assertThat(panel.getSearchField().getClientProperty("JTextField.showClearButton")).isEqualTo(true);
-
-        assertThat(panel.getThemeToggleButton()).isNotNull();
-        assertThat(panel.getMiniPlayerButton()).isNotNull();
     }
 
     @Test
@@ -166,18 +178,6 @@ class ControlBarPanelTest {
     }
 
     @Test
-    @DisplayName("Theme toggle button updates icon based on current theme")
-    void testThemeToggleIntegration() {
-        ControlBarPanel panel = new ControlBarPanel();
-
-        ThemeManager.getInstance().applyTheme(AppTheme.DARK);
-        assertThat(panel.getThemeToggleButton().getText()).isEqualTo("☀️");
-
-        ThemeManager.getInstance().applyTheme(AppTheme.LIGHT);
-        assertThat(panel.getThemeToggleButton().getText()).isEqualTo("🌙");
-    }
-
-    @Test
     @DisplayName("updateLanguage updates tooltips, placeholders, and labels in Japanese and English")
     void testUpdateLanguage() {
         ControlBarPanel panel = new ControlBarPanel();
@@ -189,8 +189,6 @@ class ControlBarPanelTest {
         assertThat(panel.getPrevButton().getToolTipText()).isEqualTo("前の曲");
         assertThat(panel.getNextButton().getToolTipText()).isEqualTo("次の曲");
         assertThat(panel.getVolumeSlider().getToolTipText()).isEqualTo("音量");
-        assertThat(panel.getThemeToggleButton().getToolTipText()).isEqualTo("テーマ");
-        assertThat(panel.getMiniPlayerButton().getToolTipText()).isEqualTo("ミニプレーヤー");
         assertThat(panel.getSearchField().getClientProperty("JTextField.placeholderText"))
                 .isEqualTo("タイトル、アーティスト、アルバム、ジャンルを検索...");
 
@@ -201,21 +199,15 @@ class ControlBarPanelTest {
         assertThat(panel.getPrevButton().getToolTipText()).isEqualTo("Previous Track");
         assertThat(panel.getNextButton().getToolTipText()).isEqualTo("Next Track");
         assertThat(panel.getVolumeSlider().getToolTipText()).isEqualTo("Volume");
-        assertThat(panel.getThemeToggleButton().getToolTipText()).isEqualTo("Theme");
         assertThat(panel.getSearchField().getClientProperty("JTextField.placeholderText"))
                 .isEqualTo("Search by title, artist, album, genre...");
     }
 
     @Test
-    @DisplayName("dispose unregisters ThemeChangeListener to prevent memory leaks")
+    @DisplayName("dispose cleans up without throwing exceptions")
     void testDispose() {
         ControlBarPanel panel = new ControlBarPanel();
         panel.dispose();
-
-        // Toggling theme after dispose should not throw
-        org.assertj.core.api.Assertions.assertThatCode(() -> {
-            ThemeManager.getInstance().toggleTheme();
-        }).doesNotThrowAnyException();
     }
 
     @Test
@@ -402,5 +394,461 @@ class ControlBarPanelTest {
         panel.updateTrackInfo((com.musiclibrary.model.Track) null);
         assertThat(panel.getArtworkLabel().getIcon()).isNull();
         assertThat(panel.getArtworkLabel().getText()).isEqualTo("🎵");
+    }
+
+    @Test
+    @DisplayName("searchField is placed in the east panel with right-aligned layout and positioned on the right")
+    void testSearchFieldRightAlignedPlacement() {
+        ControlBarPanel panel = new ControlBarPanel();
+
+        BorderLayout layout = (BorderLayout) panel.getLayout();
+        Component eastComp = layout.getLayoutComponent(BorderLayout.EAST);
+        assertThat(eastComp).isInstanceOf(JPanel.class);
+
+        JPanel rightPanel = (JPanel) eastComp;
+        assertThat(rightPanel.getLayout()).isInstanceOf(FlowLayout.class);
+        FlowLayout flowLayout = (FlowLayout) rightPanel.getLayout();
+        assertThat(flowLayout.getAlignment()).isEqualTo(FlowLayout.RIGHT);
+
+        // Contains the search field and nothing else
+        assertThat(rightPanel.getComponentCount()).isEqualTo(1);
+        assertThat(rightPanel.getComponent(0)).isSameAs(panel.getSearchField());
+
+        // Real layout test: set actual size and verify doLayout positions searchField to the right
+        panel.setSize(1000, 60);
+        panel.doLayout();
+        rightPanel.doLayout();
+
+        Point searchFieldPosInPanel = SwingUtilities.convertPoint(panel.getSearchField(), 0, 0, panel);
+        assertThat(searchFieldPosInPanel.x).isGreaterThan(700);
+        assertThat(panel.getSearchField().getWidth()).isGreaterThan(0);
+        assertThat(panel.getSearchField().getHeight()).isGreaterThan(0);
+    }
+
+    @Test
+    @DisplayName("Mute button initializes with flat style, sound icon, correct tooltip, and is positioned left of volumeSlider in real layout")
+    void testMuteButtonInitialization() {
+        ControlBarPanel panel = new ControlBarPanel();
+        JButton muteButton = panel.getMuteButton();
+        javax.swing.JSlider volumeSlider = panel.getVolumeSlider();
+
+        assertThat(muteButton).isNotNull();
+        assertThat(muteButton.getClientProperty("JButton.buttonType")).isEqualTo("toolBarButton");
+        assertThat(muteButton.getPreferredSize().width).isEqualTo(30);
+        assertThat(muteButton.getPreferredSize().height).isEqualTo(28);
+        assertThat(muteButton.getText()).isEqualTo("🔊");
+        assertThat(muteButton.getToolTipText()).isEqualTo("Mute");
+        assertThat(panel.getPreviousNonZeroVolume()).isEqualTo(70);
+
+        // Real UI layout invariant verification
+        panel.setSize(1000, 60);
+        panel.doLayout();
+
+        BorderLayout layout = (BorderLayout) panel.getLayout();
+        Component westComp = layout.getLayoutComponent(BorderLayout.WEST);
+        assertThat(westComp).isInstanceOf(JPanel.class);
+        JPanel transportPanel = (JPanel) westComp;
+        transportPanel.doLayout();
+
+        assertThat(muteButton.getParent()).isSameAs(transportPanel);
+        assertThat(volumeSlider.getParent()).isSameAs(transportPanel);
+        assertThat(muteButton.getWidth()).isGreaterThan(0);
+        assertThat(volumeSlider.getWidth()).isGreaterThan(0);
+
+        // Geometrical assertions: muteButton is placed to the left of volumeSlider
+        assertThat(muteButton.getX()).isLessThan(volumeSlider.getX());
+
+        Point mutePosInPanel = SwingUtilities.convertPoint(muteButton, 0, 0, panel);
+        Point sliderPosInPanel = SwingUtilities.convertPoint(volumeSlider, 0, 0, panel);
+        assertThat(mutePosInPanel.x).isLessThan(sliderPosInPanel.x);
+    }
+
+    @Test
+    @DisplayName("Mute button toggles between mute (0) and restored previous volume in Japanese locale")
+    void testMuteButtonToggleJapaneseLocale() {
+        I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+        ControlBarPanel panel = new ControlBarPanel();
+
+        // 1. Initial state (🔊, ツールチップ: "ミュート", 音量70)
+        assertThat(panel.getVolumeSlider().getValue()).isEqualTo(70);
+        assertThat(panel.getMuteButton().getText()).isEqualTo("🔊");
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("ミュート");
+
+        // 2. Click -> mute (🔇, ツールチップ: "ミュート解除", 音量0)
+        panel.getMuteButton().doClick();
+        assertThat(panel.getVolumeSlider().getValue()).isEqualTo(0);
+        assertThat(panel.getMuteButton().getText()).isEqualTo("🔇");
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("ミュート解除");
+        assertThat(panel.getPreviousNonZeroVolume()).isEqualTo(70);
+
+        // 3. Click again -> unmute (🔊, ツールチップ: "ミュート", 音量70復帰)
+        panel.getMuteButton().doClick();
+        assertThat(panel.getVolumeSlider().getValue()).isEqualTo(70);
+        assertThat(panel.getMuteButton().getText()).isEqualTo("🔊");
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("ミュート");
+
+        // 4. Manual slider movement to 50 -> updates previousNonZeroVolume to 50 and stays unmuted
+        panel.getVolumeSlider().setValue(50);
+        assertThat(panel.getPreviousNonZeroVolume()).isEqualTo(50);
+        assertThat(panel.getMuteButton().getText()).isEqualTo("🔊");
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("ミュート");
+
+        // 5. Click mute -> volume 0, 🔇, ミュート解除
+        panel.getMuteButton().doClick();
+        assertThat(panel.getVolumeSlider().getValue()).isEqualTo(0);
+        assertThat(panel.getMuteButton().getText()).isEqualTo("🔇");
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("ミュート解除");
+
+        // 6. Click unmute -> restores to 50
+        panel.getMuteButton().doClick();
+        assertThat(panel.getVolumeSlider().getValue()).isEqualTo(50);
+        assertThat(panel.getMuteButton().getText()).isEqualTo("🔊");
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("ミュート");
+    }
+
+    @Test
+    @DisplayName("Mute button toggles between mute (0) and previous volume")
+    void testMuteButtonToggle() {
+        ControlBarPanel panel = new ControlBarPanel();
+
+        // 1. Initial volume is 70; click mute -> volume 0, icon 🔇, tooltip Unmute
+        panel.getMuteButton().doClick();
+        assertThat(panel.getVolumeSlider().getValue()).isEqualTo(0);
+        assertThat(panel.getMuteButton().getText()).isEqualTo("🔇");
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("Unmute");
+        assertThat(panel.getPreviousNonZeroVolume()).isEqualTo(70);
+
+        // 2. Click again -> restores to 70, icon 🔊, tooltip Mute
+        panel.getMuteButton().doClick();
+        assertThat(panel.getVolumeSlider().getValue()).isEqualTo(70);
+        assertThat(panel.getMuteButton().getText()).isEqualTo("🔊");
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("Mute");
+
+        // 3. Change volume slider to 45 manually
+        panel.getVolumeSlider().setValue(45);
+        assertThat(panel.getPreviousNonZeroVolume()).isEqualTo(45);
+        assertThat(panel.getMuteButton().getText()).isEqualTo("🔊");
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("Mute");
+
+        // 4. Click mute -> volume 0, icon 🔇
+        panel.getMuteButton().doClick();
+        assertThat(panel.getVolumeSlider().getValue()).isEqualTo(0);
+        assertThat(panel.getMuteButton().getText()).isEqualTo("🔇");
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("Unmute");
+        assertThat(panel.getPreviousNonZeroVolume()).isEqualTo(45);
+
+        // 5. Click unmute -> restores to 45
+        panel.getMuteButton().doClick();
+        assertThat(panel.getVolumeSlider().getValue()).isEqualTo(45);
+        assertThat(panel.getMuteButton().getText()).isEqualTo("🔊");
+    }
+
+    @Test
+    @DisplayName("Moving volume slider to zero and non-zero updates mute button icon, tooltip, and retained volume")
+    void testSliderDirectMovementUpdatesMuteState() {
+        ControlBarPanel panel = new ControlBarPanel();
+        panel.getVolumeSlider().setValue(80);
+        assertThat(panel.getPreviousNonZeroVolume()).isEqualTo(80);
+
+        // Move slider to 0 directly
+        panel.getVolumeSlider().setValue(0);
+        assertThat(panel.getMuteButton().getText()).isEqualTo("🔇");
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("Unmute");
+        // previousNonZeroVolume should remain 80
+        assertThat(panel.getPreviousNonZeroVolume()).isEqualTo(80);
+
+        // Clicking mute button should restore to 80
+        panel.getMuteButton().doClick();
+        assertThat(panel.getVolumeSlider().getValue()).isEqualTo(80);
+        assertThat(panel.getMuteButton().getText()).isEqualTo("🔊");
+
+        // Move slider from 80 to 25
+        panel.getVolumeSlider().setValue(25);
+        assertThat(panel.getPreviousNonZeroVolume()).isEqualTo(25);
+        assertThat(panel.getMuteButton().getText()).isEqualTo("🔊");
+    }
+
+    @Test
+    @DisplayName("Language switch updates mute button tooltip in both muted and unmuted states")
+    void testMuteButtonLanguageSwitch() {
+        ControlBarPanel panel = new ControlBarPanel();
+
+        // 1. Unmuted (vol=70) English
+        I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        panel.updateLanguage();
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("Mute");
+
+        // 2. Unmuted Japanese
+        I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+        panel.updateLanguage();
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("ミュート");
+
+        // 3. Muted (vol=0) Japanese
+        panel.getVolumeSlider().setValue(0);
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("ミュート解除");
+
+        // 4. Muted English
+        I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        panel.updateLanguage();
+        assertThat(panel.getMuteButton().getToolTipText()).isEqualTo("Unmute");
+    }
+
+    @Test
+    @DisplayName("Removed theme toggle button and mini player button are completely absent from ControlBarPanel")
+    void testRemovedButtonsIntegrity() {
+        ControlBarPanel panel = new ControlBarPanel();
+
+        // 1. Reflection verification: ensure getter methods are completely removed
+        assertThat(ControlBarPanel.class.getDeclaredMethods())
+                .noneMatch(m -> m.getName().equalsIgnoreCase("getThemeToggleButton")
+                        || m.getName().equalsIgnoreCase("getMiniPlayerButton")
+                        || m.getName().equalsIgnoreCase("getThemeButton"));
+
+        // 2. Reflection verification: ensure fields are completely removed
+        assertThat(ControlBarPanel.class.getDeclaredFields())
+                .noneMatch(f -> f.getName().equalsIgnoreCase("themeToggleButton")
+                        || f.getName().equalsIgnoreCase("miniPlayerButton")
+                        || f.getName().equalsIgnoreCase("themeButton"));
+
+        // 3. East (right) panel contains no buttons whatsoever
+        BorderLayout layout = (BorderLayout) panel.getLayout();
+        Component eastComp = layout.getLayoutComponent(BorderLayout.EAST);
+        assertThat(eastComp).isInstanceOf(JPanel.class);
+        JPanel rightPanel = (JPanel) eastComp;
+        assertThat(rightPanel.getComponents()).noneMatch(c -> c instanceof JButton);
+
+        // 4. Verify all JButtons across the entire ControlBarPanel are exclusively transport controls
+        // (ignoring internal FlatLaf text field clear buttons)
+        List<Component> allComponents = getAllComponents(panel);
+        List<JButton> allButtons = allComponents.stream()
+                .filter(JButton.class::isInstance)
+                .map(JButton.class::cast)
+                .filter(b -> !"TextField.clearButton".equals(b.getName()))
+                .toList();
+
+        assertThat(allButtons).containsExactlyInAnyOrder(
+                panel.getPrevButton(),
+                panel.getPlayPauseButton(),
+                panel.getNextButton(),
+                panel.getShuffleButton(),
+                panel.getRepeatButton(),
+                panel.getMuteButton()
+        );
+    }
+
+    @Test
+    @DisplayName("volumeSlider preferred size is expanded by 20% to 102x24 and verified in real UI layout")
+    void testVolumeSliderPreferredSizeExpansion() {
+        ControlBarPanel panel = new ControlBarPanel();
+        JSlider volumeSlider = panel.getVolumeSlider();
+
+        // Preferred size invariant
+        assertThat(volumeSlider.getPreferredSize()).isEqualTo(new Dimension(102, 24));
+
+        // Real UI layout invariant: size and layout within panel hierarchy
+        panel.setSize(1000, 60);
+        panel.doLayout();
+        BorderLayout bl = (BorderLayout) panel.getLayout();
+        JPanel transportPanel = (JPanel) bl.getLayoutComponent(BorderLayout.WEST);
+        transportPanel.doLayout();
+
+        assertThat(volumeSlider.getWidth()).isEqualTo(102);
+        assertThat(volumeSlider.getHeight()).isEqualTo(24);
+    }
+
+    @Test
+    @DisplayName("volumeSlider returns localized tooltip when idle and real-time numeric value (0-100) during drag in both EN and JA")
+    void testVolumeSliderTooltipDuringAdjustment() {
+        ControlBarPanel panel = new ControlBarPanel();
+        JSlider volumeSlider = panel.getVolumeSlider();
+        MouseEvent dummyEvent = new MouseEvent(volumeSlider, MouseEvent.MOUSE_MOVED, System.currentTimeMillis(), 0, 50, 10, 0, false);
+
+        // 1. Idle state (getValueIsAdjusting = false) in English
+        I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        panel.updateLanguage();
+        assertThat(volumeSlider.getToolTipText()).isEqualTo("Volume");
+        assertThat(volumeSlider.getToolTipText(dummyEvent)).isEqualTo("Volume");
+
+        // 2. Dragging state (getValueIsAdjusting = true) in English
+        volumeSlider.setValueIsAdjusting(true);
+
+        volumeSlider.setValue(70);
+        assertThat(volumeSlider.getToolTipText()).isEqualTo("70");
+        assertThat(volumeSlider.getToolTipText(dummyEvent)).isEqualTo("70");
+
+        volumeSlider.setValue(0);
+        assertThat(volumeSlider.getToolTipText()).isEqualTo("0");
+        assertThat(volumeSlider.getToolTipText(dummyEvent)).isEqualTo("0");
+
+        volumeSlider.setValue(100);
+        assertThat(volumeSlider.getToolTipText()).isEqualTo("100");
+        assertThat(volumeSlider.getToolTipText(dummyEvent)).isEqualTo("100");
+
+        volumeSlider.setValue(45);
+        assertThat(volumeSlider.getToolTipText()).isEqualTo("45");
+        assertThat(volumeSlider.getToolTipText(dummyEvent)).isEqualTo("45");
+
+        // 3. Released state in Japanese
+        volumeSlider.setValueIsAdjusting(false);
+        I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+        panel.updateLanguage();
+        assertThat(volumeSlider.getToolTipText()).isEqualTo("音量");
+        assertThat(volumeSlider.getToolTipText(dummyEvent)).isEqualTo("音量");
+
+        // 4. Dragging state in Japanese still returns numeric volume value (0-100)
+        volumeSlider.setValueIsAdjusting(true);
+        volumeSlider.setValue(85);
+        assertThat(volumeSlider.getToolTipText()).isEqualTo("85");
+        assertThat(volumeSlider.getToolTipText(dummyEvent)).isEqualTo("85");
+
+        // 5. Release back to Japanese
+        volumeSlider.setValueIsAdjusting(false);
+        assertThat(volumeSlider.getToolTipText()).isEqualTo("音量");
+        assertThat(volumeSlider.getToolTipText(dummyEvent)).isEqualTo("音量");
+    }
+
+    @Test
+    @DisplayName("Volume slider drag mouse and lifecycle events operate safely without throwing in headless/hidden states")
+    void testVolumeSliderMouseEventsSafelyHandled() {
+        ControlBarPanel panel = new ControlBarPanel();
+        JSlider volumeSlider = panel.getVolumeSlider();
+
+        MouseEvent rightClickPress = new MouseEvent(volumeSlider, MouseEvent.MOUSE_PRESSED, System.currentTimeMillis(),
+                MouseEvent.BUTTON3_DOWN_MASK, 50, 12, 1, false, MouseEvent.BUTTON3);
+        MouseEvent pressEvent = new MouseEvent(volumeSlider, MouseEvent.MOUSE_PRESSED, System.currentTimeMillis(),
+                MouseEvent.BUTTON1_DOWN_MASK, 50, 12, 1, false, MouseEvent.BUTTON1);
+        MouseEvent dragEvent = new MouseEvent(volumeSlider, MouseEvent.MOUSE_DRAGGED, System.currentTimeMillis(),
+                MouseEvent.BUTTON1_DOWN_MASK, 60, 12, 0, false, MouseEvent.BUTTON1);
+        MouseEvent releaseEvent = new MouseEvent(volumeSlider, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(),
+                0, 60, 12, 1, false, MouseEvent.BUTTON1);
+        FocusEvent focusLostEvent = new FocusEvent(volumeSlider, FocusEvent.FOCUS_LOST);
+        ComponentEvent hiddenEvent = new ComponentEvent(volumeSlider, ComponentEvent.COMPONENT_HIDDEN);
+
+        org.assertj.core.api.Assertions.assertThatCode(() -> {
+            // Right-click press is ignored safely
+            for (java.awt.event.MouseListener ml : volumeSlider.getMouseListeners()) {
+                ml.mousePressed(rightClickPress);
+            }
+            for (java.awt.event.MouseListener ml : volumeSlider.getMouseListeners()) {
+                ml.mousePressed(pressEvent);
+            }
+            for (java.awt.event.MouseMotionListener mml : volumeSlider.getMouseMotionListeners()) {
+                mml.mouseDragged(dragEvent);
+            }
+            for (java.awt.event.FocusListener fl : volumeSlider.getFocusListeners()) {
+                fl.focusLost(focusLostEvent);
+            }
+            for (java.awt.event.ComponentListener cl : volumeSlider.getComponentListeners()) {
+                cl.componentHidden(hiddenEvent);
+            }
+            for (java.awt.event.MouseListener ml : volumeSlider.getMouseListeners()) {
+                ml.mouseReleased(releaseEvent);
+            }
+            panel.dispose();
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("Volume slider drag popup lifecycle: show, update on drag/change, and cleanup on release, focusLost, hidden, and dispose")
+    void testVolumeSliderDragPopupLifecycle() throws Exception {
+        if (java.awt.GraphicsEnvironment.isHeadless()) {
+            return;
+        }
+
+        javax.swing.JFrame testFrame = new javax.swing.JFrame("Volume Drag Test");
+        ControlBarPanel panel = new ControlBarPanel();
+        testFrame.add(panel);
+        testFrame.pack();
+        testFrame.setVisible(true);
+
+        try {
+            JSlider volumeSlider = panel.getVolumeSlider();
+            assertThat(volumeSlider.isShowing()).isTrue();
+
+            java.lang.reflect.Field popupField = ControlBarPanel.class.getDeclaredField("dragPopup");
+            popupField.setAccessible(true);
+            java.lang.reflect.Field tooltipField = ControlBarPanel.class.getDeclaredField("dragToolTip");
+            tooltipField.setAccessible(true);
+
+            // Initially popup is null
+            assertThat(popupField.get(panel)).isNull();
+
+            // 1. Mouse Pressed with Left Button -> popup shown
+            MouseEvent pressEvent = new MouseEvent(volumeSlider, MouseEvent.MOUSE_PRESSED, System.currentTimeMillis(),
+                    MouseEvent.BUTTON1_DOWN_MASK, 50, 12, 1, false, MouseEvent.BUTTON1);
+            for (java.awt.event.MouseListener ml : volumeSlider.getMouseListeners()) {
+                ml.mousePressed(pressEvent);
+            }
+            assertThat(popupField.get(panel)).isNotNull();
+            javax.swing.JToolTip tip = (javax.swing.JToolTip) tooltipField.get(panel);
+            assertThat(tip).isNotNull();
+            assertThat(tip.getTipText()).isEqualTo(String.valueOf(volumeSlider.getValue()));
+
+            // 2. Mouse Dragged with new value -> tooltip updated to slider's new value
+            volumeSlider.setValueIsAdjusting(true);
+            MouseEvent dragEvent = new MouseEvent(volumeSlider, MouseEvent.MOUSE_DRAGGED, System.currentTimeMillis(),
+                    MouseEvent.BUTTON1_DOWN_MASK, 30, 12, 0, false, MouseEvent.BUTTON1);
+            for (java.awt.event.MouseMotionListener mml : volumeSlider.getMouseMotionListeners()) {
+                mml.mouseDragged(dragEvent);
+            }
+            assertThat(popupField.get(panel)).isNotNull();
+            assertThat(((javax.swing.JToolTip) tooltipField.get(panel)).getTipText())
+                    .isEqualTo(String.valueOf(volumeSlider.getValue()));
+
+            // 3. Mouse Released -> popup dismissed
+            MouseEvent releaseEvent = new MouseEvent(volumeSlider, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(),
+                    0, 30, 12, 1, false, MouseEvent.BUTTON1);
+            for (java.awt.event.MouseListener ml : volumeSlider.getMouseListeners()) {
+                ml.mouseReleased(releaseEvent);
+            }
+            assertThat(popupField.get(panel)).isNull();
+
+            // 4. Mouse Pressed again, then focus lost -> popup dismissed
+            for (java.awt.event.MouseListener ml : volumeSlider.getMouseListeners()) {
+                ml.mousePressed(pressEvent);
+            }
+            assertThat(popupField.get(panel)).isNotNull();
+
+            FocusEvent focusLost = new FocusEvent(volumeSlider, FocusEvent.FOCUS_LOST);
+            for (java.awt.event.FocusListener fl : volumeSlider.getFocusListeners()) {
+                fl.focusLost(focusLost);
+            }
+            assertThat(popupField.get(panel)).isNull();
+
+            // 5. Mouse Pressed again, then component hidden -> popup dismissed
+            for (java.awt.event.MouseListener ml : volumeSlider.getMouseListeners()) {
+                ml.mousePressed(pressEvent);
+            }
+            assertThat(popupField.get(panel)).isNotNull();
+
+            ComponentEvent hideEvent = new ComponentEvent(volumeSlider, ComponentEvent.COMPONENT_HIDDEN);
+            for (java.awt.event.ComponentListener cl : volumeSlider.getComponentListeners()) {
+                cl.componentHidden(hideEvent);
+            }
+            assertThat(popupField.get(panel)).isNull();
+
+            // 6. Mouse Pressed again, then dispose() -> popup dismissed
+            for (java.awt.event.MouseListener ml : volumeSlider.getMouseListeners()) {
+                ml.mousePressed(pressEvent);
+            }
+            assertThat(popupField.get(panel)).isNotNull();
+
+            panel.dispose();
+            assertThat(popupField.get(panel)).isNull();
+
+        } finally {
+            testFrame.dispose();
+        }
+    }
+
+    private List<Component> getAllComponents(Container container) {
+        List<Component> list = new ArrayList<>();
+        for (Component c : container.getComponents()) {
+            list.add(c);
+            if (c instanceof Container childContainer) {
+                list.addAll(getAllComponents(childContainer));
+            }
+        }
+        return list;
     }
 }

@@ -291,6 +291,38 @@ class PlayerControllerTest {
     }
 
     @Test
+    @DisplayName("Mute button click synchronizes volume to 0.0f and restored volume (0.7f) on AudioPlayer via PlayerController")
+    void testMuteButtonClickSynchronizesVolumeToAudioPlayer() {
+        // Initial state: slider is 70, dummyAudioPlayer is 0.7f
+        assertThat(controlBarPanel.getVolumeSlider().getValue()).isEqualTo(70);
+        assertThat(dummyAudioPlayer.getVolume()).isEqualTo(0.7f);
+
+        // Click mute button -> volume becomes 0, audioPlayer is set to 0.0f
+        controlBarPanel.getMuteButton().doClick();
+        assertThat(controlBarPanel.getVolumeSlider().getValue()).isEqualTo(0);
+        assertThat(dummyAudioPlayer.getVolume()).isEqualTo(0.0f);
+
+        // Click again (unmute) -> volume restored to 70, audioPlayer is set to 0.7f
+        controlBarPanel.getMuteButton().doClick();
+        assertThat(controlBarPanel.getVolumeSlider().getValue()).isEqualTo(70);
+        assertThat(dummyAudioPlayer.getVolume()).isEqualTo(0.7f);
+
+        // Change volume slider to 45% -> audioPlayer is set to 0.45f
+        controlBarPanel.getVolumeSlider().setValue(45);
+        assertThat(dummyAudioPlayer.getVolume()).isEqualTo(0.45f);
+
+        // Click mute button -> volume becomes 0, audioPlayer is set to 0.0f
+        controlBarPanel.getMuteButton().doClick();
+        assertThat(controlBarPanel.getVolumeSlider().getValue()).isEqualTo(0);
+        assertThat(dummyAudioPlayer.getVolume()).isEqualTo(0.0f);
+
+        // Click unmute -> volume restored to 45, audioPlayer is set to 0.45f
+        controlBarPanel.getMuteButton().doClick();
+        assertThat(controlBarPanel.getVolumeSlider().getValue()).isEqualTo(45);
+        assertThat(dummyAudioPlayer.getVolume()).isEqualTo(0.45f);
+    }
+
+    @Test
     @DisplayName("skipForward advances unbounded when total duration is zero or unknown")
     void testSkipBoundariesWithZeroTotalDuration() {
         dummyAudioPlayer.totalDurationSeconds = 0;

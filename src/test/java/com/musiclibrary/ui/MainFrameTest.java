@@ -20,16 +20,22 @@ import org.junit.jupiter.api.Test;
 
 import javax.swing.Action;
 import javax.swing.ActionMap;
+import javax.swing.InputMap;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JSlider;
+import javax.swing.KeyStroke;
 import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
+import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.util.List;
+import com.musiclibrary.ui.menu.AppMenuBar;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -901,22 +907,14 @@ class MainFrameTest {
     }
 
     @Test
-    @DisplayName("Mini player mode can be triggered via ControlBar button, View menu item, and shortcut")
+    @DisplayName("Mini player mode can be triggered via View menu item and shortcut")
     void testMiniPlayerTriggers() {
         MainFrame frame = new MainFrame();
 
         try {
             frame.setVisible(true);
 
-            // 1. Trigger via ControlBar button
-            frame.getControlBarPanel().getMiniPlayerButton().doClick();
-            assertThat(frame.isVisible()).isFalse();
-            assertThat(frame.getMiniPlayerFrame().isVisible()).isTrue();
-
-            frame.restoreFromMiniPlayer();
-            assertThat(frame.isVisible()).isTrue();
-
-            // 2. Trigger via View Menu item (View menu index 2, item index 3 is miniPlayerItem)
+            // 1. Trigger via View Menu item (View menu index 2, item index 3 is miniPlayerItem)
             JMenuItem miniPlayerMenuItem = frame.getJMenuBar().getMenu(2).getItem(3);
             assertThat(miniPlayerMenuItem.getText()).isEqualTo("Mini Player");
             miniPlayerMenuItem.doClick();
@@ -926,11 +924,80 @@ class MainFrameTest {
             frame.restoreFromMiniPlayer();
             assertThat(frame.isVisible()).isTrue();
 
-            // 3. Trigger via Keyboard Shortcut ActionMap
+            // 2. Trigger via Keyboard Shortcut ActionMap
             ActionMap actionMap = frame.getRootPane().getActionMap();
             triggerAction(actionMap, "miniPlayerToggle");
             assertThat(frame.isVisible()).isFalse();
             assertThat(frame.getMiniPlayerFrame().isVisible()).isTrue();
+        } finally {
+            frame.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("Mini player and theme switching operate correctly via View menu bar and Ctrl+M, Ctrl+T keyboard shortcuts")
+    void testViewMenuAndShortcutsForMiniPlayerAndThemeToggle() {
+        MainFrame frame = new MainFrame();
+
+        try {
+            frame.setVisible(true);
+
+            // 1. Verify View menu hierarchy and accelerator
+            AppMenuBar menuBar = frame.getAppMenuBar();
+            JMenuItem miniPlayerItem = menuBar.getMiniPlayerItem();
+            assertThat(miniPlayerItem).isNotNull();
+            assertThat(miniPlayerItem.getAccelerator()).isEqualTo(KeyStroke.getKeyStroke(KeyEvent.VK_M, KeyEvent.CTRL_DOWN_MASK));
+
+            // Verify RootPane InputMap bindings for Ctrl+M and Ctrl+T
+            int mask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+            InputMap inputMap = frame.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+            assertThat(inputMap.get(KeyStroke.getKeyStroke(KeyEvent.VK_M, mask))).isEqualTo("miniPlayerToggle");
+            assertThat(inputMap.get(KeyStroke.getKeyStroke(KeyEvent.VK_T, mask))).isEqualTo("themeToggle");
+
+            // 2. Test Mini player toggle from View menu item
+            miniPlayerItem.doClick();
+            assertThat(frame.isVisible()).isFalse();
+            assertThat(frame.getMiniPlayerFrame().isVisible()).isTrue();
+
+            // Restore via mini player restore button
+            frame.getMiniPlayerFrame().getRestoreButton().doClick();
+            assertThat(frame.isVisible()).isTrue();
+            assertThat(frame.getMiniPlayerFrame().isVisible()).isFalse();
+
+            // 3. Test Mini player toggle from Ctrl+M shortcut action
+            ActionMap actionMap = frame.getRootPane().getActionMap();
+            triggerAction(actionMap, "miniPlayerToggle");
+            assertThat(frame.isVisible()).isFalse();
+            assertThat(frame.getMiniPlayerFrame().isVisible()).isTrue();
+
+            // Restore via Ctrl+M on mini player
+            ActionMap miniActionMap = frame.getMiniPlayerFrame().getRootPane().getActionMap();
+            Action restoreAction = miniActionMap.get("restoreWindow");
+            assertThat(restoreAction).isNotNull();
+            restoreAction.actionPerformed(new ActionEvent(this, ActionEvent.ACTION_PERFORMED, "restoreWindow"));
+            assertThat(frame.isVisible()).isTrue();
+            assertThat(frame.getMiniPlayerFrame().isVisible()).isFalse();
+
+            // 4. Test Theme toggle via Ctrl+T shortcut action
+            ThemeManager tm = ThemeManager.getInstance();
+            tm.applyTheme(AppTheme.DARK);
+            assertThat(tm.getCurrentTheme()).isEqualTo(AppTheme.DARK);
+
+            triggerAction(actionMap, "themeToggle");
+            assertThat(tm.getCurrentTheme()).isEqualTo(AppTheme.LIGHT);
+
+            triggerAction(actionMap, "themeToggle");
+            assertThat(tm.getCurrentTheme()).isEqualTo(AppTheme.DARK);
+
+            // 5. Test Theme switching via View menu -> Theme sub menu
+            JMenu themeSubMenu = menuBar.getThemeSubMenu();
+            assertThat(themeSubMenu).isNotNull();
+            JRadioButtonMenuItem darkRadio = (JRadioButtonMenuItem) themeSubMenu.getItem(0);
+            JRadioButtonMenuItem lightRadio = (JRadioButtonMenuItem) themeSubMenu.getItem(1);
+            lightRadio.doClick();
+            assertThat(tm.getCurrentTheme()).isEqualTo(AppTheme.LIGHT);
+            darkRadio.doClick();
+            assertThat(tm.getCurrentTheme()).isEqualTo(AppTheme.DARK);
         } finally {
             frame.dispose();
         }
@@ -1378,6 +1445,46 @@ class MainFrameTest {
 
             assertThat(col.getHeaderValue()).isEqualTo("#");
             assertThat(col.getPreferredWidth()).isEqualTo(80);
+        } finally {
+            frame.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("MainFrame ControlBarPanel mute button toggles volume and synchronizes with language updates")
+    void testMainFrameMuteButtonIntegration() {
+        MainFrame frame = new MainFrame();
+        try {
+            var controlBar = frame.getControlBarPanel();
+            var muteButton = controlBar.getMuteButton();
+            var volumeSlider = controlBar.getVolumeSlider();
+
+            // Initial: volume 70, icon 🔊, tooltip Mute
+            assertThat(volumeSlider.getValue()).isEqualTo(70);
+            assertThat(muteButton.getText()).isEqualTo("🔊");
+            assertThat(muteButton.getToolTipText()).isEqualTo("Mute");
+
+            // Click mute -> volume 0, icon 🔇, tooltip Unmute
+            muteButton.doClick();
+            assertThat(volumeSlider.getValue()).isEqualTo(0);
+            assertThat(muteButton.getText()).isEqualTo("🔇");
+            assertThat(muteButton.getToolTipText()).isEqualTo("Unmute");
+
+            // Language switch while muted -> tooltip becomes "ミュート解除"
+            I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+            frame.updateLanguage();
+            assertThat(muteButton.getToolTipText()).isEqualTo("ミュート解除");
+
+            // Click unmute -> volume restored to 70, tooltip "ミュート"
+            muteButton.doClick();
+            assertThat(volumeSlider.getValue()).isEqualTo(70);
+            assertThat(muteButton.getText()).isEqualTo("🔊");
+            assertThat(muteButton.getToolTipText()).isEqualTo("ミュート");
+
+            // Restore English
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+            frame.updateLanguage();
+            assertThat(muteButton.getToolTipText()).isEqualTo("Mute");
         } finally {
             frame.dispose();
         }

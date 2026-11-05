@@ -735,6 +735,9 @@ class BasicAudioPlayerTest {
                         if ("isOpen".equals(method.getName())) {
                             return true;
                         }
+                        if ("isControlSupported".equals(method.getName())) {
+                            return false;
+                        }
                         invokedMethods.add(method.getName());
                         return null;
                     }
@@ -803,6 +806,9 @@ class BasicAudioPlayerTest {
                     (proxy, method, args) -> {
                         if ("isOpen".equals(method.getName())) {
                             return true;
+                        }
+                        if ("isControlSupported".equals(method.getName())) {
+                            return false;
                         }
                         invokedMethods.add(method.getName());
                         return null;
@@ -886,6 +892,9 @@ class BasicAudioPlayerTest {
                         if ("isOpen".equals(method.getName())) {
                             return true;
                         }
+                        if ("isControlSupported".equals(method.getName())) {
+                            return false;
+                        }
                         invokedMethods.add(method.getName());
                         return null;
                     }
@@ -912,6 +921,101 @@ class BasicAudioPlayerTest {
             assertThat(playbackThread.isAlive()).isFalse();
             assertThat(playerField.get(player)).isNull();
             assertThat(deviceField.get(player)).isNull();
+        }
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @DisplayName("setVolume executes with low latency (<50ms) and triggers line flush on mute boundary transitions during playback")
+    void testSetVolumeLatencyAndMuteFlushInterlockingDuringPlayback() throws Exception {
+        Path mp3File = createDummyMp3File("test_volume_latency.mp3", 100);
+        Track track = Track.builder()
+                .filePath(mp3File.toAbsolutePath().toString())
+                .title("Volume Latency Track")
+                .durationSeconds(10)
+                .build();
+
+        try (BasicAudioPlayer player = new BasicAudioPlayer()) {
+            CountDownLatch startedLatch = new CountDownLatch(1);
+            player.addPlayerListener(new PlayerListener() {
+                @Override
+                public void onTrackStarted(Track t) {
+                    startedLatch.countDown();
+                }
+            });
+
+            player.play(track);
+            assertThat(startedLatch.await(3, TimeUnit.SECONDS)).isTrue();
+
+            Field deviceField = BasicAudioPlayer.class.getDeclaredField("activeAudioDevice");
+            deviceField.setAccessible(true);
+            VolumeAudioDevice device = null;
+            long deadline = System.currentTimeMillis() + 3000;
+            while (System.currentTimeMillis() < deadline) {
+                device = (VolumeAudioDevice) deviceField.get(player);
+                if (device != null) {
+                    break;
+                }
+                Thread.sleep(5);
+            }
+            assertThat(device).isNotNull();
+
+            // Inject mock SourceDataLine into activeAudioDevice
+            List<String> invokedMethods = Collections.synchronizedList(new ArrayList<>());
+            SourceDataLine mockLine = (SourceDataLine) Proxy.newProxyInstance(
+                    SourceDataLine.class.getClassLoader(),
+                    new Class<?>[]{SourceDataLine.class},
+                    (proxy, method, args) -> {
+                        if ("isOpen".equals(method.getName())) {
+                            return true;
+                        }
+                        if ("isControlSupported".equals(method.getName())) {
+                            return false;
+                        }
+                        invokedMethods.add(method.getName());
+                        return null;
+                    }
+            );
+            Field sourceField = VolumeAudioDevice.class.getDeclaredField("source");
+            sourceField.setAccessible(true);
+            sourceField.set(device, mockLine);
+
+            // Initial state: volume is 0.7f (unmuted)
+            invokedMethods.clear();
+
+            // 1. Mute transition: 0.7f -> 0.0f
+            long t0 = System.nanoTime();
+            player.setVolume(0.0f);
+            long muteElapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0);
+
+            assertThat(muteElapsedMs).isLessThan(50); // Low latency within tens of milliseconds
+            assertThat(player.getVolume()).isEqualTo(0.0f);
+            assertThat(device.getVolume()).isEqualTo(0.0f);
+            assertThat(invokedMethods).containsExactly("flush");
+
+            // 2. Unmute transition: 0.0f -> 0.6f
+            invokedMethods.clear();
+            long t1 = System.nanoTime();
+            player.setVolume(0.6f);
+            long unmuteElapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t1);
+
+            assertThat(unmuteElapsedMs).isLessThan(50); // Low latency within tens of milliseconds
+            assertThat(player.getVolume()).isEqualTo(0.6f);
+            assertThat(device.getVolume()).isEqualTo(0.6f);
+            assertThat(invokedMethods).containsExactly("flush");
+
+            // 3. Normal volume change: 0.6f -> 0.8f (must NOT flush to prevent audio pops/clicks)
+            invokedMethods.clear();
+            long t2 = System.nanoTime();
+            player.setVolume(0.8f);
+            long adjustElapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t2);
+
+            assertThat(adjustElapsedMs).isLessThan(50);
+            assertThat(player.getVolume()).isEqualTo(0.8f);
+            assertThat(device.getVolume()).isEqualTo(0.8f);
+            assertThat(invokedMethods).isEmpty();
+
+            player.stop();
         }
     }
 
