@@ -144,4 +144,107 @@ class VolumeAudioDeviceTest {
         assertThat(invokedMethods).contains("stop", "close");
         assertThat(sourceField.get(device)).isNull();
     }
+
+    @Test
+    @DisplayName("pauseAudio, resumeAudio, stopAudio safely invoke underlying SourceDataLine methods when open")
+    void testAudioControlMethodsWhenOpen() throws Exception {
+        VolumeAudioDevice device = new VolumeAudioDevice(0.8f);
+
+        List<String> invokedMethods = new ArrayList<>();
+        SourceDataLine mockLine = (SourceDataLine) Proxy.newProxyInstance(
+                SourceDataLine.class.getClassLoader(),
+                new Class<?>[]{SourceDataLine.class},
+                (proxy, method, args) -> {
+                    if ("isOpen".equals(method.getName())) {
+                        return true;
+                    }
+                    invokedMethods.add(method.getName());
+                    return null;
+                }
+        );
+
+        Field sourceField = VolumeAudioDevice.class.getDeclaredField("source");
+        sourceField.setAccessible(true);
+        sourceField.set(device, mockLine);
+
+        // pauseAudio -> stop()
+        device.pauseAudio();
+        assertThat(invokedMethods).containsExactly("stop");
+
+        // resumeAudio -> start()
+        invokedMethods.clear();
+        device.resumeAudio();
+        assertThat(invokedMethods).containsExactly("start");
+
+        // stopAudio -> stop(), flush()
+        invokedMethods.clear();
+        device.stopAudio();
+        assertThat(invokedMethods).containsExactly("stop", "flush");
+    }
+
+    @Test
+    @DisplayName("pauseAudio, resumeAudio, stopAudio are safe no-ops when source is null or closed")
+    void testAudioControlMethodsWhenNullOrClosed() throws Exception {
+        VolumeAudioDevice device = new VolumeAudioDevice(0.8f);
+
+        // When source is null
+        assertThatCode(() -> {
+            device.pauseAudio();
+            device.resumeAudio();
+            device.stopAudio();
+        }).doesNotThrowAnyException();
+
+        // When source is closed (isOpen returns false)
+        List<String> invokedMethods = new ArrayList<>();
+        SourceDataLine mockLine = (SourceDataLine) Proxy.newProxyInstance(
+                SourceDataLine.class.getClassLoader(),
+                new Class<?>[]{SourceDataLine.class},
+                (proxy, method, args) -> {
+                    if ("isOpen".equals(method.getName())) {
+                        return false;
+                    }
+                    invokedMethods.add(method.getName());
+                    return null;
+                }
+        );
+
+        Field sourceField = VolumeAudioDevice.class.getDeclaredField("source");
+        sourceField.setAccessible(true);
+        sourceField.set(device, mockLine);
+
+        assertThatCode(() -> {
+            device.pauseAudio();
+            device.resumeAudio();
+            device.stopAudio();
+        }).doesNotThrowAnyException();
+
+        assertThat(invokedMethods).isEmpty();
+    }
+
+    @Test
+    @DisplayName("pauseAudio, resumeAudio, stopAudio catch and suppress any hardware line exceptions")
+    void testAudioControlMethodsHandleHardwareExceptions() throws Exception {
+        VolumeAudioDevice device = new VolumeAudioDevice(0.8f);
+
+        SourceDataLine mockLine = (SourceDataLine) Proxy.newProxyInstance(
+                SourceDataLine.class.getClassLoader(),
+                new Class<?>[]{SourceDataLine.class},
+                (proxy, method, args) -> {
+                    if ("isOpen".equals(method.getName())) {
+                        return true;
+                    }
+                    throw new RuntimeException("Hardware driver error");
+                }
+        );
+
+        Field sourceField = VolumeAudioDevice.class.getDeclaredField("source");
+        sourceField.setAccessible(true);
+        sourceField.set(device, mockLine);
+
+        assertThatCode(() -> {
+            device.pauseAudio();
+            device.resumeAudio();
+            device.stopAudio();
+        }).doesNotThrowAnyException();
+    }
 }

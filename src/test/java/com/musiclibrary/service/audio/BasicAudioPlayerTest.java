@@ -7,8 +7,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
+import javax.sound.sampled.SourceDataLine;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -683,6 +686,231 @@ class BasicAudioPlayerTest {
 
             assertThat(finishedLatch.await(3, TimeUnit.SECONDS)).isTrue();
             assertThat(player.getState()).isEqualTo(PlaybackState.STOPPED);
+        }
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @DisplayName("pause triggers pauseAudio on device and stops output without waiting")
+    void testPauseTriggersPauseAudioAndStopsWithoutWaiting() throws Exception {
+        Path mp3File = createDummyMp3File("test_pause_instant.mp3", 100);
+        Track track = Track.builder()
+                .filePath(mp3File.toAbsolutePath().toString())
+                .title("Instant Pause Track")
+                .durationSeconds(10)
+                .build();
+
+        try (BasicAudioPlayer player = new BasicAudioPlayer()) {
+            CountDownLatch startedLatch = new CountDownLatch(1);
+            player.addPlayerListener(new PlayerListener() {
+                @Override
+                public void onTrackStarted(Track t) {
+                    startedLatch.countDown();
+                }
+            });
+
+            player.play(track);
+            assertThat(startedLatch.await(3, TimeUnit.SECONDS)).isTrue();
+
+            // Wait for activeAudioDevice initialization
+            Field deviceField = BasicAudioPlayer.class.getDeclaredField("activeAudioDevice");
+            deviceField.setAccessible(true);
+            VolumeAudioDevice device = null;
+            long deadline = System.currentTimeMillis() + 3000;
+            while (System.currentTimeMillis() < deadline) {
+                device = (VolumeAudioDevice) deviceField.get(player);
+                if (device != null) {
+                    break;
+                }
+                Thread.sleep(5);
+            }
+            assertThat(device).isNotNull();
+
+            // Inject mock SourceDataLine into activeAudioDevice to capture line operations
+            List<String> invokedMethods = Collections.synchronizedList(new ArrayList<>());
+            SourceDataLine mockLine = (SourceDataLine) Proxy.newProxyInstance(
+                    SourceDataLine.class.getClassLoader(),
+                    new Class<?>[]{SourceDataLine.class},
+                    (proxy, method, args) -> {
+                        if ("isOpen".equals(method.getName())) {
+                            return true;
+                        }
+                        invokedMethods.add(method.getName());
+                        return null;
+                    }
+            );
+            Field sourceField = VolumeAudioDevice.class.getDeclaredField("source");
+            sourceField.setAccessible(true);
+            sourceField.set(device, mockLine);
+
+            // Execute pause and measure latency
+            long t0 = System.nanoTime();
+            player.pause();
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0);
+
+            assertThat(elapsedMs).isLessThan(50); // Instantaneous, well under 50ms
+            assertThat(player.getState()).isEqualTo(PlaybackState.PAUSED);
+            assertThat(player.isPlaying()).isFalse();
+
+            // Verify device.pauseAudio() called line.stop()
+            assertThat(invokedMethods).contains("stop");
+
+            player.stop();
+        }
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @DisplayName("resume triggers resumeAudio on device and resumes output without delay")
+    void testResumeTriggersResumeAudioOnDevice() throws Exception {
+        Path mp3File = createDummyMp3File("test_resume_instant.mp3", 100);
+        Track track = Track.builder()
+                .filePath(mp3File.toAbsolutePath().toString())
+                .title("Instant Resume Track")
+                .durationSeconds(10)
+                .build();
+
+        try (BasicAudioPlayer player = new BasicAudioPlayer()) {
+            CountDownLatch startedLatch = new CountDownLatch(1);
+            player.addPlayerListener(new PlayerListener() {
+                @Override
+                public void onTrackStarted(Track t) {
+                    startedLatch.countDown();
+                }
+            });
+
+            player.play(track);
+            assertThat(startedLatch.await(3, TimeUnit.SECONDS)).isTrue();
+
+            Field deviceField = BasicAudioPlayer.class.getDeclaredField("activeAudioDevice");
+            deviceField.setAccessible(true);
+            VolumeAudioDevice device = null;
+            long deadline = System.currentTimeMillis() + 3000;
+            while (System.currentTimeMillis() < deadline) {
+                device = (VolumeAudioDevice) deviceField.get(player);
+                if (device != null) {
+                    break;
+                }
+                Thread.sleep(5);
+            }
+            assertThat(device).isNotNull();
+
+            // Inject mock SourceDataLine into activeAudioDevice
+            List<String> invokedMethods = Collections.synchronizedList(new ArrayList<>());
+            SourceDataLine mockLine = (SourceDataLine) Proxy.newProxyInstance(
+                    SourceDataLine.class.getClassLoader(),
+                    new Class<?>[]{SourceDataLine.class},
+                    (proxy, method, args) -> {
+                        if ("isOpen".equals(method.getName())) {
+                            return true;
+                        }
+                        invokedMethods.add(method.getName());
+                        return null;
+                    }
+            );
+            Field sourceField = VolumeAudioDevice.class.getDeclaredField("source");
+            sourceField.setAccessible(true);
+            sourceField.set(device, mockLine);
+
+            player.pause();
+            invokedMethods.clear();
+
+            // Execute resume and measure latency
+            long t0 = System.nanoTime();
+            player.resume();
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0);
+
+            assertThat(elapsedMs).isLessThan(50); // Instantaneous, well under 50ms
+            assertThat(player.getState()).isEqualTo(PlaybackState.PLAYING);
+            assertThat(player.isPlaying()).isTrue();
+
+            // Verify device.resumeAudio() called line.start()
+            assertThat(invokedMethods).contains("start");
+
+            player.stop();
+        }
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @DisplayName("stop triggers stopAudio on device, closes JLayer player immediately, and stops playback within tens of milliseconds")
+    void testStopTriggersStopAudioAndClosesImmediatelyWithinTensOfMilliseconds() throws Exception {
+        Path mp3File = createDummyMp3File("test_stop_instant.mp3", 100);
+        Track track = Track.builder()
+                .filePath(mp3File.toAbsolutePath().toString())
+                .title("Instant Stop Track")
+                .durationSeconds(10)
+                .build();
+
+        try (BasicAudioPlayer player = new BasicAudioPlayer()) {
+            CountDownLatch startedLatch = new CountDownLatch(1);
+            player.addPlayerListener(new PlayerListener() {
+                @Override
+                public void onTrackStarted(Track t) {
+                    startedLatch.countDown();
+                }
+            });
+
+            player.play(track);
+            assertThat(startedLatch.await(3, TimeUnit.SECONDS)).isTrue();
+
+            Field deviceField = BasicAudioPlayer.class.getDeclaredField("activeAudioDevice");
+            deviceField.setAccessible(true);
+            Field playerField = BasicAudioPlayer.class.getDeclaredField("activeJlayerPlayer");
+            playerField.setAccessible(true);
+            Field threadField = BasicAudioPlayer.class.getDeclaredField("playbackThread");
+            threadField.setAccessible(true);
+
+            VolumeAudioDevice device = null;
+            long deadline = System.currentTimeMillis() + 3000;
+            while (System.currentTimeMillis() < deadline) {
+                device = (VolumeAudioDevice) deviceField.get(player);
+                if (device != null && playerField.get(player) != null) {
+                    break;
+                }
+                Thread.sleep(5);
+            }
+            assertThat(device).isNotNull();
+            javazoom.jl.player.Player jlayerPlayer = (javazoom.jl.player.Player) playerField.get(player);
+            assertThat(jlayerPlayer).isNotNull();
+            Thread playbackThread = (Thread) threadField.get(player);
+            assertThat(playbackThread).isNotNull();
+            assertThat(playbackThread.isAlive()).isTrue();
+
+            // Inject mock SourceDataLine into activeAudioDevice
+            List<String> invokedMethods = Collections.synchronizedList(new ArrayList<>());
+            SourceDataLine mockLine = (SourceDataLine) Proxy.newProxyInstance(
+                    SourceDataLine.class.getClassLoader(),
+                    new Class<?>[]{SourceDataLine.class},
+                    (proxy, method, args) -> {
+                        if ("isOpen".equals(method.getName())) {
+                            return true;
+                        }
+                        invokedMethods.add(method.getName());
+                        return null;
+                    }
+            );
+            Field sourceField = VolumeAudioDevice.class.getDeclaredField("source");
+            sourceField.setAccessible(true);
+            sourceField.set(device, mockLine);
+
+            // Execute stop and measure latency
+            long t0 = System.nanoTime();
+            player.stop();
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0);
+
+            // Crucial: stops within tens of milliseconds (<< 1000ms, typically < 50ms)
+            assertThat(elapsedMs).isLessThan(150);
+            assertThat(player.getState()).isEqualTo(PlaybackState.STOPPED);
+            assertThat(player.isPlaying()).isFalse();
+
+            // Verify device.stopAudio() invoked line.stop() and line.flush()
+            assertThat(invokedMethods).contains("stop", "flush");
+
+            // Verify player thread has terminated promptly
+            assertThat(playbackThread.isAlive()).isFalse();
+            assertThat(playerField.get(player)).isNull();
+            assertThat(deviceField.get(player)).isNull();
         }
     }
 

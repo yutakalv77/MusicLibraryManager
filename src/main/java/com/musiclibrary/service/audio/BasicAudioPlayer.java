@@ -42,8 +42,8 @@ public class BasicAudioPlayer implements AudioPlayer {
     private volatile Long pendingSeekSeconds = null;
 
     private Thread playbackThread = null;
-    private VolumeAudioDevice activeAudioDevice = null;
-    private Player activeJlayerPlayer = null;
+    private volatile VolumeAudioDevice activeAudioDevice = null;
+    private volatile Player activeJlayerPlayer = null;
     private InputStream activeInputStream = null;
 
     public BasicAudioPlayer() {
@@ -80,6 +80,10 @@ public class BasicAudioPlayer implements AudioPlayer {
         synchronized (stateLock) {
             if (state == PlaybackState.PLAYING) {
                 paused = true;
+                VolumeAudioDevice device = this.activeAudioDevice;
+                if (device != null) {
+                    device.pauseAudio();
+                }
                 transitionState(PlaybackState.PAUSED);
             }
         }
@@ -90,6 +94,10 @@ public class BasicAudioPlayer implements AudioPlayer {
         synchronized (stateLock) {
             if (state == PlaybackState.PAUSED) {
                 paused = false;
+                VolumeAudioDevice device = this.activeAudioDevice;
+                if (device != null) {
+                    device.resumeAudio();
+                }
                 synchronized (pauseLock) {
                     pauseLock.notifyAll();
                 }
@@ -109,6 +117,21 @@ public class BasicAudioPlayer implements AudioPlayer {
         stopRequested = true;
         paused = false;
         pendingSeekSeconds = null;
+
+        VolumeAudioDevice device = this.activeAudioDevice;
+        if (device != null) {
+            device.stopAudio();
+        }
+
+        Player player = this.activeJlayerPlayer;
+        if (player != null) {
+            try {
+                player.close();
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.DEBUG, "Failed to close player during stopInternal", e);
+            }
+        }
+
         synchronized (pauseLock) {
             pauseLock.notifyAll();
         }
@@ -116,7 +139,7 @@ public class BasicAudioPlayer implements AudioPlayer {
         if (playbackThread != null) {
             playbackThread.interrupt();
             try {
-                playbackThread.join(500);
+                playbackThread.join(100);
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
             }
@@ -275,19 +298,27 @@ public class BasicAudioPlayer implements AudioPlayer {
                     break;
                 }
 
+                Player player = this.activeJlayerPlayer;
+                if (player == null) {
+                    break;
+                }
+
                 // Decode and render single frame (~26ms)
-                boolean hasMoreFrames = activeJlayerPlayer.play(1);
+                boolean hasMoreFrames = player.play(1);
                 if (!hasMoreFrames) {
-                    if (framesDecoded == 0 && seekOffsetSeconds == 0) {
-                        throw new javazoom.jl.decoder.JavaLayerException("No playable audio frames found in file: " + filePathStr);
+                    if (!stopRequested) {
+                        if (framesDecoded == 0 && seekOffsetSeconds == 0) {
+                            throw new javazoom.jl.decoder.JavaLayerException("No playable audio frames found in file: " + filePathStr);
+                        }
+                        naturalCompletion = true;
                     }
-                    naturalCompletion = true;
                     break;
                 }
                 framesDecoded++;
 
                 // Update position
-                int posMs = activeAudioDevice.getPosition();
+                VolumeAudioDevice device = this.activeAudioDevice;
+                int posMs = device != null ? device.getPosition() : 0;
                 long curSec = totalSeconds > 0
                         ? Math.min(totalSeconds, seekOffsetSeconds + (posMs / 1000L))
                         : seekOffsetSeconds + (posMs / 1000L);
@@ -309,10 +340,16 @@ public class BasicAudioPlayer implements AudioPlayer {
         } finally {
             cleanupPlaybackResources();
 
+            boolean stateChanged = false;
             synchronized (stateLock) {
-                this.state = PlaybackState.STOPPED;
+                if (this.state != PlaybackState.STOPPED) {
+                    this.state = PlaybackState.STOPPED;
+                    stateChanged = true;
+                }
             }
-            dispatch(l -> l.onStateChanged(PlaybackState.STOPPED));
+            if (stateChanged) {
+                dispatch(l -> l.onStateChanged(PlaybackState.STOPPED));
+            }
 
             if (errorEncountered != null) {
                 Throwable err = errorEncountered;

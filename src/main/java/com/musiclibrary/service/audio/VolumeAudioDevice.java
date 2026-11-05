@@ -20,7 +20,7 @@ public class VolumeAudioDevice extends AudioDeviceBase {
 
     private static final System.Logger LOGGER = System.getLogger(VolumeAudioDevice.class.getName());
 
-    private SourceDataLine source;
+    private volatile SourceDataLine source;
     private AudioFormat fmt;
     private byte[] byteBuf = new byte[4096];
     private float volume; // 0.0f - 1.0f
@@ -55,6 +55,49 @@ public class VolumeAudioDevice extends AudioDeviceBase {
 
     public boolean isHardwareGainSupported() {
         return hardwareGainSupported;
+    }
+
+    /**
+     * Instantly pauses audio output at the hardware/mixer level.
+     */
+    public void pauseAudio() {
+        SourceDataLine line = this.source;
+        if (line != null && line.isOpen()) {
+            try {
+                line.stop();
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.DEBUG, "Failed to pause audio line", e);
+            }
+        }
+    }
+
+    /**
+     * Resumes audio output at the hardware/mixer level.
+     */
+    public void resumeAudio() {
+        SourceDataLine line = this.source;
+        if (line != null && line.isOpen()) {
+            try {
+                line.start();
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.DEBUG, "Failed to resume audio line", e);
+            }
+        }
+    }
+
+    /**
+     * Instantly stops audio output and flushes buffered audio bytes from the mixer.
+     */
+    public void stopAudio() {
+        SourceDataLine line = this.source;
+        if (line != null && line.isOpen()) {
+            try {
+                line.stop();
+                line.flush();
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.DEBUG, "Failed to stop/flush audio line", e);
+            }
+        }
     }
 
     @Override
