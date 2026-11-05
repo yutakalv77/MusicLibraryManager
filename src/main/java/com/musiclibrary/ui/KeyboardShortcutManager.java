@@ -47,6 +47,7 @@ public class KeyboardShortcutManager {
         }
     }
 
+    @SuppressWarnings("MagicConstant")
     private void registerKeyBindings() {
         int mask = getMenuShortcutMask();
         InputMap inputMap = rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);

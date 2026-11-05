@@ -3,7 +3,6 @@ package com.musiclibrary.util;
 import javax.swing.SwingUtilities;
 import java.awt.GraphicsEnvironment;
 import java.lang.reflect.InvocationTargetException;
-import java.util.Objects;
 
 /**
  * Utility methods for managing Swing Event Dispatch Thread (EDT) execution safely and uniformly.

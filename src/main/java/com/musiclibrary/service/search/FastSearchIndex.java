@@ -11,7 +11,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -163,7 +162,7 @@ public class FastSearchIndex {
                 }
             }
 
-            if (candidateIds == null || candidateIds.isEmpty()) {
+            if (candidateIds.isEmpty()) {
                 return Collections.emptySet();
             }
 

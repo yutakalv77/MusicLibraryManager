@@ -285,7 +285,8 @@ public class I18nManager {
             LocaleConfig config = new LocaleConfig();
             config.locale = (currentLocale != null ? currentLocale : AppLocale.SYSTEM).name();
 
-            String fileName = configPath.getFileName().toString();
+            Path fileNamePath = configPath.getFileName();
+            String fileName = fileNamePath != null ? fileNamePath.toString() : "language.json";
             Path tempPath = configPath.resolveSibling(fileName + ".tmp");
 
             try {

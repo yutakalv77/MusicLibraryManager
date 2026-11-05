@@ -50,11 +50,11 @@ class AlbumGridViewPanelTest {
     void testFilterAlbums() {
         gridPanel.filterAlbums("night");
         assertThat(gridPanel.getDisplayedAlbums()).hasSize(1);
-        assertThat(gridPanel.getDisplayedAlbums().get(0).getTitle()).isEqualTo("A Night at the Opera");
+        assertThat(gridPanel.getDisplayedAlbums().getFirst().getTitle()).isEqualTo("A Night at the Opera");
 
         gridPanel.filterAlbums("PINK");
         assertThat(gridPanel.getDisplayedAlbums()).hasSize(1);
-        assertThat(gridPanel.getDisplayedAlbums().get(0).getTitle()).isEqualTo("The Wall");
+        assertThat(gridPanel.getDisplayedAlbums().getFirst().getTitle()).isEqualTo("The Wall");
 
         gridPanel.filterAlbums("");
         assertThat(gridPanel.getDisplayedAlbums()).hasSize(2);
@@ -115,7 +115,7 @@ class AlbumGridViewPanelTest {
     void testFilterWhitespaceHandling() {
         gridPanel.filterAlbums("   night   ");
         assertThat(gridPanel.getDisplayedAlbums()).hasSize(1);
-        assertThat(gridPanel.getDisplayedAlbums().get(0).getTitle()).isEqualTo("A Night at the Opera");
+        assertThat(gridPanel.getDisplayedAlbums().getFirst().getTitle()).isEqualTo("A Night at the Opera");
 
         gridPanel.filterAlbums("    ");
         assertThat(gridPanel.getDisplayedAlbums()).hasSize(2);
@@ -168,9 +168,9 @@ class AlbumGridViewPanelTest {
         int testValue = Math.max(20, max / 2);
         panel.getScrollPane().getVerticalScrollBar().setValue(testValue);
 
-        panel.saveScrollPosition(largeAlbumList.get(0));
+        panel.saveScrollPosition(largeAlbumList.getFirst());
         assertThat(panel.getSavedScrollPosition()).isEqualTo(panel.getScrollPane().getVerticalScrollBar().getValue());
-        assertThat(panel.getLastSelectedAlbum()).isEqualTo(largeAlbumList.get(0));
+        assertThat(panel.getLastSelectedAlbum()).isEqualTo(largeAlbumList.getFirst());
 
         // Reset scroll value
         panel.getScrollPane().getVerticalScrollBar().setValue(0);
@@ -281,7 +281,7 @@ class AlbumGridViewPanelTest {
     @DisplayName("setAlbums with preserveScroll=true re-renders cards if album content has actually changed")
     void testSetAlbumsPreserveScrollWithModifiedContentReRendersSafely() {
         Track t3 = Track.builder().id("3").filePath("tracks/3.mp3").title("Song 3").artist("Led Zeppelin").album("IV").build();
-        Album album3 = Album.fromTracks(List.of(t3)).get(0);
+        Album album3 = Album.fromTracks(List.of(t3)).getFirst();
 
         gridPanel.setSavedScrollPosition(100);
         gridPanel.setLastSelectedAlbum(album3);
@@ -292,5 +292,57 @@ class AlbumGridViewPanelTest {
         assertThat(gridPanel.getAllAlbums()).hasSize(3);
         assertThat(gridPanel.getRenderedCardCount()).isEqualTo(3);
         assertThat(gridPanel.getSavedScrollPosition()).isEqualTo(100);
+    }
+
+    @Test
+    @DisplayName("setSelectedAlbum updates selectedAlbum and synchronizes card selection highlights")
+    void testCardSelectionHighlightSync() {
+        assertThat(gridPanel.getSelectedAlbum()).isNull();
+        assertThat(gridPanel.getCardPanels()).allMatch(c -> !c.isSelected());
+
+        gridPanel.setSelectedAlbum(album1);
+        assertThat(gridPanel.getSelectedAlbum()).isEqualTo(album1);
+        assertThat(gridPanel.getCardPanels())
+                .filteredOn(c -> c.getAlbum().equals(album1))
+                .allMatch(AlbumCardPanel::isSelected);
+        assertThat(gridPanel.getCardPanels())
+                .filteredOn(c -> c.getAlbum().equals(album2))
+                .allMatch(c -> !c.isSelected());
+
+        gridPanel.setSelectedAlbum(album2);
+        assertThat(gridPanel.getSelectedAlbum()).isEqualTo(album2);
+        assertThat(gridPanel.getCardPanels())
+                .filteredOn(c -> c.getAlbum().equals(album2))
+                .allMatch(AlbumCardPanel::isSelected);
+        assertThat(gridPanel.getCardPanels())
+                .filteredOn(c -> c.getAlbum().equals(album1))
+                .allMatch(c -> !c.isSelected());
+
+        gridPanel.setSelectedAlbum(null);
+        assertThat(gridPanel.getSelectedAlbum()).isNull();
+        assertThat(gridPanel.getCardPanels()).allMatch(c -> !c.isSelected());
+    }
+
+    @Test
+    @DisplayName("filterAlbums retains selection if selected album matches filter, and clears selection if excluded")
+    void testFilterAlbumsSelectionRetentionAndClearance() {
+        AtomicReference<Album> callbackAlbum = new AtomicReference<>(album1);
+        gridPanel.setOnAlbumSelectedAction(callbackAlbum::set);
+
+        gridPanel.setSelectedAlbum(album1);
+        assertThat(gridPanel.getSelectedAlbum()).isEqualTo(album1);
+
+        // Filter that still matches album1 ("Queen" / "A Night at the Opera")
+        gridPanel.filterAlbums("Queen");
+        assertThat(gridPanel.getSelectedAlbum()).isEqualTo(album1);
+        assertThat(gridPanel.getCardPanels()).hasSize(1);
+        assertThat(gridPanel.getCardPanels().getFirst().isSelected()).isTrue();
+        assertThat(callbackAlbum.get()).isEqualTo(album1);
+
+        // Filter that excludes album1 ("Pink Floyd")
+        gridPanel.filterAlbums("Floyd");
+        assertThat(gridPanel.getSelectedAlbum()).isNull();
+        assertThat(gridPanel.getCardPanels()).allMatch(c -> !c.isSelected());
+        assertThat(callbackAlbum.get()).isNull();
     }
 }

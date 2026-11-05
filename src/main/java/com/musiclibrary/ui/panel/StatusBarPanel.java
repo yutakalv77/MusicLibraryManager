@@ -4,7 +4,6 @@ import com.musiclibrary.i18n.I18nManager;
 import com.musiclibrary.util.FormatUtils;
 
 import javax.swing.BorderFactory;
-import javax.swing.Box;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
@@ -16,6 +15,7 @@ import java.awt.FlowLayout;
  * Bottom status bar panel displaying library summary metrics (track count, total duration,
  * total file size) and a background progress indicator.
  */
+@SuppressWarnings({"this-escape"})
 public class StatusBarPanel extends JPanel {
 
     private final JLabel summaryLabel;

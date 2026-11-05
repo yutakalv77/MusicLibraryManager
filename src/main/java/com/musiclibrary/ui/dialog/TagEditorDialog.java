@@ -7,10 +7,8 @@ import com.musiclibrary.service.cache.ArtworkCache;
 import com.musiclibrary.util.FormatUtils;
 import com.musiclibrary.util.TimeFormatter;
 
-import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
-import javax.swing.BoxLayout;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -36,8 +34,6 @@ import java.awt.Image;
 import java.awt.Insets;
 import java.awt.Window;
 import java.awt.event.KeyEvent;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -49,6 +45,7 @@ import java.util.function.Consumer;
  * Modal dialog for editing ID3 metadata tags.
  * Supports both single-track detailed editing and multi-track batch editing.
  */
+@SuppressWarnings({"this-escape"})
 public class TagEditorDialog extends JDialog {
 
     private static final String[] COMMON_GENRES = {
@@ -464,12 +461,6 @@ public class TagEditorDialog extends JDialog {
             builder.genre(genreObj != null ? genreObj.toString().trim() : "");
             builder.year(parsedYear);
             builder.trackNumber(parsedTrackNumber);
-
-            if (pendingClearArtwork) {
-                builder.clearArtwork();
-            } else if (pendingArtworkData != null) {
-                builder.artwork(pendingArtworkData, pendingArtworkMimeType);
-            }
         } else {
             // Multi-track batch mode: only set fields that the user explicitly edited/entered
             String artistText = artistField.getText().trim();
@@ -491,12 +482,12 @@ public class TagEditorDialog extends JDialog {
             if (!yearStr.isEmpty()) {
                 builder.year(parsedYear);
             }
+        }
 
-            if (pendingClearArtwork) {
-                builder.clearArtwork();
-            } else if (pendingArtworkData != null) {
-                builder.artwork(pendingArtworkData, pendingArtworkMimeType);
-            }
+        if (pendingClearArtwork) {
+            builder.clearArtwork();
+        } else if (pendingArtworkData != null) {
+            builder.artwork(pendingArtworkData, pendingArtworkMimeType);
         }
 
         TrackMetadataUpdate update = builder.build();

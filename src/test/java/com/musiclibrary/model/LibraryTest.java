@@ -723,4 +723,3 @@ class LibraryTest {
         assertThat(avgMicros).isLessThan(50.0);
     }
 }
-

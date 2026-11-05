@@ -32,6 +32,7 @@ import java.util.function.Consumer;
  * Sidebar panel displaying Library navigation items, user playlists,
  * and a button to create new playlists.
  */
+@SuppressWarnings({"this-escape"})
 public class SidebarPanel extends JPanel {
 
     public enum LibrarySection {
@@ -69,8 +70,6 @@ public class SidebarPanel extends JPanel {
     private Consumer<LibrarySection> onSectionSelectedAction;
     private Consumer<Playlist> onPlaylistSelectedAction;
     private BiConsumer<Playlist, List<String>> onTracksDroppedOnPlaylistAction;
-
-    private java.util.Map<String, String> folderNames = new java.util.HashMap<>();
 
     public SidebarPanel() {
         setLayout(new BorderLayout());
@@ -305,12 +304,13 @@ public class SidebarPanel extends JPanel {
     public void setPlaylists(List<Playlist> playlists, java.util.Map<String, String> folderNames) {
         this.currentPlaylists.clear();
         this.playlistListModel.clear();
-        this.folderNames = folderNames != null ? new java.util.HashMap<>(folderNames) : new java.util.HashMap<>();
+
+        folderNames = folderNames != null ? new java.util.HashMap<>(folderNames) : new java.util.HashMap<>();
 
         if (playlists != null) {
             this.currentPlaylists.addAll(playlists);
             for (Playlist playlist : playlists) {
-                String folderName = playlist.getFolderId() != null ? this.folderNames.get(playlist.getFolderId()) : null;
+                String folderName = playlist.getFolderId() != null ? folderNames.get(playlist.getFolderId()) : null;
                 if (folderName != null && !folderName.isBlank()) {
                     this.playlistListModel.addElement("📁  " + folderName + " / 🎵 " + playlist.getName());
                 } else {
@@ -377,17 +377,13 @@ public class SidebarPanel extends JPanel {
         }
         for (int i = 0; i < currentPlaylists.size(); i++) {
             if (Objects.equals(currentPlaylists.get(i).getId(), playlistId)) {
-                if (i >= 0 && i < playlistListModel.getSize()) {
+                if (i < playlistListModel.getSize()) {
                     playlistList.setSelectedIndex(i);
                     playlistList.ensureIndexIsVisible(i);
                 }
                 return;
             }
         }
-    }
-
-    public JPopupMenu getPlaylistContextMenu() {
-        return playlistContextMenu;
     }
 
     public JMenuItem getPlayPlaylistItem() {

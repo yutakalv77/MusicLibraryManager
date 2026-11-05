@@ -13,6 +13,7 @@ import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
+import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -25,17 +26,23 @@ import javax.swing.SortOrder;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.TransferHandler;
+import javax.swing.UIManager;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.TableColumnModelEvent;
 import javax.swing.event.TableColumnModelListener;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Desktop;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GridLayout;
 import java.awt.Toolkit;
 import java.awt.datatransfer.Transferable;
 import java.awt.event.ActionEvent;
@@ -43,6 +50,7 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -52,6 +60,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -59,7 +68,10 @@ import java.util.stream.Collectors;
  * Center table panel displaying tracks with configurable columns, high-performance flyweight
  * cell renderers, row context menu, and column visibility toggle via header right-click context menu.
  */
+@SuppressWarnings({"this-escape"})
 public class TrackTablePanel extends JPanel {
+
+    private static final System.Logger LOGGER = System.getLogger(TrackTablePanel.class.getName());
 
     private final JTable table;
     private final JScrollPane scrollPane;
@@ -90,6 +102,7 @@ public class TrackTablePanel extends JPanel {
     private final JMenuItem playNextMenuItem;
     private final JMenuItem getInfoMenuItem;
     private final JMenuItem editTagsMenuItem;
+    private final JMenuItem openFolderMenuItem;
     private final JMenuItem deleteMenuItem;
 
     // Action callbacks
@@ -97,6 +110,7 @@ public class TrackTablePanel extends JPanel {
     private Consumer<Track> onPlayNextAction;
     private Consumer<Track> onGetInfoAction;
     private Consumer<List<Track>> onEditTagsAction;
+    private Consumer<Track> onOpenFolderAction;
     private Consumer<Track> onDeleteAction;
     private Consumer<List<Track>> onDeleteTracksAction;
     private boolean isPlaylistContext = false;
@@ -105,6 +119,15 @@ public class TrackTablePanel extends JPanel {
     private volatile String currentPlayingTrackId = null;
     private volatile PlaybackState currentPlaybackState = PlaybackState.STOPPED;
     private final StatusCellRenderer statusRenderer = new StatusCellRenderer();
+
+    // Compact Two-Line Mode (Album Split View Right Pane)
+    public static final int DEFAULT_ROW_HEIGHT = 26;
+    public static final int COMPACT_ROW_HEIGHT = 50;
+    private boolean compactTwoLineMode = false;
+    private final TableColumn compactTrackColumn;
+    private final TwoLineTrackCellRenderer twoLineRenderer;
+    private List<UserPreferences.ColumnConfig> savedColumnConfigs;
+    private UserPreferences.SortConfig savedSortConfig;
 
     // Shared Flyweight Cell Renderers
     private static final NumericCellRenderer TRACK_NUMBER_RENDERER = new NumericCellRenderer(SwingConstants.CENTER, "-");
@@ -212,6 +235,12 @@ public class TrackTablePanel extends JPanel {
         this.columnMenuItems = new JCheckBoxMenuItem[columnCount];
         this.headerPopupMenu = new JPopupMenu();
 
+        this.twoLineRenderer = new TwoLineTrackCellRenderer();
+        this.compactTrackColumn = new TableColumn(TrackTableModel.COLUMN_INDEX_TITLE);
+        this.compactTrackColumn.setMinWidth(100);
+        this.compactTrackColumn.setPreferredWidth(400);
+        this.compactTrackColumn.setCellRenderer(this.twoLineRenderer);
+
         setupColumns();
         setupHeaderContextMenu();
 
@@ -221,12 +250,15 @@ public class TrackTablePanel extends JPanel {
         playNextMenuItem = new JMenuItem();
         getInfoMenuItem = new JMenuItem();
         editTagsMenuItem = new JMenuItem();
+        openFolderMenuItem = new JMenuItem();
         deleteMenuItem = new JMenuItem();
 
         setupRowContextMenu();
 
         scrollPane = new JScrollPane(table);
+        scrollPane.setMinimumSize(new Dimension(150, 0));
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        setMinimumSize(new Dimension(150, 0));
         add(scrollPane, BorderLayout.CENTER);
 
         updateLanguage();
@@ -394,6 +426,9 @@ public class TrackTablePanel extends JPanel {
         if (modelIndex == TrackTableModel.COLUMN_INDEX_STATUS || (modelIndex == TrackTableModel.COLUMN_INDEX_TITLE && !visible)) {
             return;
         }
+        if (compactTwoLineMode) {
+            return;
+        }
 
         boolean currentlyVisible = isColumnVisible(modelIndex);
         if (currentlyVisible == visible) {
@@ -424,7 +459,83 @@ public class TrackTablePanel extends JPanel {
         if (columnMenuItems != null && modelIndex < columnMenuItems.length && columnMenuItems[modelIndex] != null) {
             columnMenuItems[modelIndex].setSelected(visible);
         }
-        table.getTableHeader().repaint();
+        if (table.getTableHeader() != null) {
+            table.getTableHeader().repaint();
+        }
+    }
+
+    /**
+     * Switches between compact 2-line track display mode (used in the right pane of Album split view)
+     * and the standard multi-column table mode.
+     *
+     * @param compact true to enable compact 2-line single-column mode, false to restore multi-column mode
+     */
+    public void setCompactTwoLineMode(boolean compact) {
+        if (this.compactTwoLineMode == compact) {
+            return;
+        }
+        if (compact) {
+            this.savedColumnConfigs = exportColumnConfigs();
+            this.savedSortConfig = exportSortConfig();
+            this.compactTwoLineMode = true;
+
+            if (rowSorter != null) {
+                rowSorter.setSortKeys(null);
+            }
+            if (table.getTableHeader() != null) {
+                table.getTableHeader().setVisible(false);
+            }
+            scrollPane.setColumnHeaderView(null);
+            if (scrollPane.getColumnHeader() != null) {
+                scrollPane.getColumnHeader().setVisible(false);
+            }
+
+            table.setRowHeight(COMPACT_ROW_HEIGHT);
+
+            TableColumnModel colModel = table.getColumnModel();
+            while (colModel.getColumnCount() > 0) {
+                colModel.removeColumn(colModel.getColumn(0));
+            }
+            colModel.addColumn(compactTrackColumn);
+        } else {
+            this.compactTwoLineMode = false;
+
+            if (table.getTableHeader() != null) {
+                table.getTableHeader().setVisible(true);
+            }
+            scrollPane.setColumnHeaderView(table.getTableHeader());
+            if (scrollPane.getColumnHeader() != null) {
+                scrollPane.getColumnHeader().setVisible(true);
+            }
+
+            table.setRowHeight(DEFAULT_ROW_HEIGHT);
+
+            if (savedColumnConfigs != null && !savedColumnConfigs.isEmpty()) {
+                applyColumnConfigs(savedColumnConfigs);
+            } else {
+                setupColumns();
+            }
+            if (savedSortConfig != null) {
+                applySortConfig(savedSortConfig);
+            }
+        }
+        table.revalidate();
+        table.repaint();
+        scrollPane.revalidate();
+        scrollPane.repaint();
+    }
+
+    /**
+     * Returns whether the table is currently in compact 2-line display mode.
+     *
+     * @return true if compact 2-line mode is active
+     */
+    public boolean isCompactTwoLineMode() {
+        return compactTwoLineMode;
+    }
+
+    public TwoLineTrackCellRenderer getTwoLineRenderer() {
+        return twoLineRenderer;
     }
 
     /**
@@ -446,6 +557,9 @@ public class TrackTablePanel extends JPanel {
      * @return list of column configurations
      */
     public List<UserPreferences.ColumnConfig> exportColumnConfigs() {
+        if (compactTwoLineMode && savedColumnConfigs != null && !savedColumnConfigs.isEmpty()) {
+            return new ArrayList<>(savedColumnConfigs);
+        }
         List<UserPreferences.ColumnConfig> list = new ArrayList<>();
         TableColumnModel colModel = table.getColumnModel();
         Set<Integer> visibleModelIndices = new HashSet<>();
@@ -476,6 +590,10 @@ public class TrackTablePanel extends JPanel {
      */
     public void applyColumnConfigs(List<UserPreferences.ColumnConfig> configs) {
         if (configs == null || configs.isEmpty()) {
+            return;
+        }
+        if (compactTwoLineMode) {
+            this.savedColumnConfigs = new ArrayList<>(configs);
             return;
         }
         TableColumnModel colModel = table.getColumnModel();
@@ -528,7 +646,9 @@ public class TrackTablePanel extends JPanel {
                 }
             }
         }
-        table.getTableHeader().repaint();
+        if (table.getTableHeader() != null) {
+            table.getTableHeader().repaint();
+        }
     }
 
     /**
@@ -537,10 +657,13 @@ public class TrackTablePanel extends JPanel {
      * @return active sort configuration
      */
     public UserPreferences.SortConfig exportSortConfig() {
+        if (compactTwoLineMode && savedSortConfig != null) {
+            return savedSortConfig;
+        }
         if (rowSorter != null) {
             List<? extends RowSorter.SortKey> keys = rowSorter.getSortKeys();
             if (keys != null && !keys.isEmpty()) {
-                RowSorter.SortKey key = keys.get(0);
+                RowSorter.SortKey key = keys.getFirst();
                 String order = switch (key.getSortOrder()) {
                     case ASCENDING -> "ASCENDING";
                     case DESCENDING -> "DESCENDING";
@@ -559,6 +682,10 @@ public class TrackTablePanel extends JPanel {
      */
     public void applySortConfig(UserPreferences.SortConfig sortConfig) {
         if (rowSorter == null || sortConfig == null) {
+            return;
+        }
+        if (compactTwoLineMode) {
+            this.savedSortConfig = sortConfig;
             return;
         }
         int col = sortConfig.getModelIndex();
@@ -606,6 +733,8 @@ public class TrackTablePanel extends JPanel {
 
         editTagsMenuItem.addActionListener(e -> triggerEditTagsAction());
 
+        openFolderMenuItem.addActionListener(e -> triggerOpenFolderAction());
+
         deleteMenuItem.addActionListener(e -> triggerDeleteAction());
 
         contextMenu.add(playMenuItem);
@@ -613,6 +742,7 @@ public class TrackTablePanel extends JPanel {
         contextMenu.addSeparator();
         contextMenu.add(getInfoMenuItem);
         contextMenu.add(editTagsMenuItem);
+        contextMenu.add(openFolderMenuItem);
         contextMenu.addSeparator();
         contextMenu.add(deleteMenuItem);
 
@@ -696,7 +826,7 @@ public class TrackTablePanel extends JPanel {
             if (onDeleteTracksAction != null) {
                 onDeleteTracksAction.accept(selected);
             } else if (onDeleteAction != null) {
-                onDeleteAction.accept(selected.get(0));
+                onDeleteAction.accept(selected.getFirst());
             }
         }
     }
@@ -709,6 +839,67 @@ public class TrackTablePanel extends JPanel {
         if (!selected.isEmpty() && onEditTagsAction != null) {
             onEditTagsAction.accept(selected);
         }
+    }
+
+    /**
+     * Triggers open folder action for the currently selected track.
+     */
+    public void triggerOpenFolderAction() {
+        Track selected = getSelectedTrack();
+        if (selected != null) {
+            if (onOpenFolderAction != null) {
+                onOpenFolderAction.accept(selected);
+            } else {
+                openContainingFolder(selected);
+            }
+        }
+    }
+
+    /**
+     * Opens the directory containing the track file asynchronously without blocking the EDT.
+     *
+     * @param track the track whose folder to open
+     */
+    public void openContainingFolder(Track track) {
+        if (track == null || track.getFilePath() == null || track.getFilePath().isBlank()) {
+            return;
+        }
+        CompletableFuture.runAsync(() -> {
+            try {
+                File file = new File(track.getFilePath());
+                File folder = file.isDirectory() ? file : file.getParentFile();
+                if (folder == null || !folder.exists()) {
+                    LOGGER.log(System.Logger.Level.WARNING, "Folder does not exist for track: {0}", track.getFilePath());
+                    return;
+                }
+
+                boolean opened = false;
+                try {
+                    if (Desktop.isDesktopSupported()) {
+                        Desktop desktop = Desktop.getDesktop();
+                        if (desktop.isSupported(Desktop.Action.OPEN)) {
+                            desktop.open(folder);
+                            opened = true;
+                        }
+                    }
+                } catch (Exception ex) {
+                    LOGGER.log(System.Logger.Level.WARNING, "Desktop.open failed, trying OS fallback: " + ex.getMessage(), ex);
+                }
+
+                if (!opened) {
+                    String os = System.getProperty("os.name", "").toLowerCase();
+                    if (os.contains("win")) {
+                        new ProcessBuilder("explorer.exe", folder.getAbsolutePath()).start();
+                    } else if (os.contains("mac")) {
+                        new ProcessBuilder("open", folder.getAbsolutePath()).start();
+                    } else {
+                        new ProcessBuilder("xdg-open", folder.getAbsolutePath()).start();
+                    }
+                }
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.WARNING, "Failed to open containing folder for track: " + track.getFilePath(), e);
+            }
+        });
     }
 
     /**
@@ -776,12 +967,15 @@ public class TrackTablePanel extends JPanel {
             }
         }
 
-        table.getTableHeader().repaint();
+        if (table.getTableHeader() != null) {
+            table.getTableHeader().repaint();
+        }
 
         playMenuItem.setText(i18n.get("table.menu.play"));
         playNextMenuItem.setText(i18n.get("table.menu.play_next"));
         getInfoMenuItem.setText(i18n.get("table.menu.get_info"));
         editTagsMenuItem.setText(i18n.get("table.menu.edit_tags"));
+        openFolderMenuItem.setText(i18n.get("table.menu.open_folder"));
         deleteMenuItem.setText(i18n.get(isPlaylistContext ? "table.menu.delete_from_playlist" : "table.menu.delete"));
     }
 
@@ -964,6 +1158,10 @@ public class TrackTablePanel extends JPanel {
         this.onEditTagsAction = onEditTagsAction;
     }
 
+    public void setOnOpenFolderAction(Consumer<Track> onOpenFolderAction) {
+        this.onOpenFolderAction = onOpenFolderAction;
+    }
+
     public JMenuItem getPlayMenuItem() {
         return playMenuItem;
     }
@@ -978,6 +1176,10 @@ public class TrackTablePanel extends JPanel {
 
     public JMenuItem getEditTagsMenuItem() {
         return editTagsMenuItem;
+    }
+
+    public JMenuItem getOpenFolderMenuItem() {
+        return openFolderMenuItem;
     }
 
     public JMenuItem getDeleteMenuItem() {
@@ -1195,6 +1397,187 @@ public class TrackTablePanel extends JPanel {
                 setToolTipText(null);
             }
             return c;
+        }
+    }
+
+    /**
+     * Flyweight cell renderer for compact 2-line track display in Album/Artist split view right pane:
+     * Left: Playback status indicator icon (when playing/paused)
+     * Line 1: Track Number + Track Title (Bold) [left], Duration [right]
+     * Line 2: Artist Name [left, indented], Rating [right]
+     */
+    @SuppressWarnings({"this-escape"})
+    public class TwoLineTrackCellRenderer extends JPanel implements TableCellRenderer {
+
+        private final PlaybackStatusIcon playingIcon = new PlaybackStatusIcon(PlaybackState.PLAYING);
+        private final PlaybackStatusIcon pausedIcon = new PlaybackStatusIcon(PlaybackState.PAUSED);
+
+        private final JLabel statusLabel;
+        private final JLabel trackNumberLabel;
+        private final JLabel titleLabel;
+        private final JLabel durationLabel;
+        private final JLabel artistLabel;
+        private final JLabel ratingLabel;
+
+        private Font cachedBaseFont;
+        private Font cachedBoldFont;
+        private Font cachedSecondaryFont;
+
+        public TwoLineTrackCellRenderer() {
+            super(new BorderLayout(6, 0));
+            setOpaque(true);
+            setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 12));
+
+            statusLabel = new JLabel("", SwingConstants.CENTER);
+            statusLabel.setPreferredSize(new Dimension(20, 20));
+            add(statusLabel, BorderLayout.WEST);
+
+            JPanel linesPanel = new JPanel(new GridLayout(2, 1, 0, 2));
+            linesPanel.setOpaque(false);
+
+            JPanel topRow = new JPanel(new BorderLayout(8, 0));
+            topRow.setOpaque(false);
+
+            trackNumberLabel = new JLabel("-", SwingConstants.RIGHT);
+            trackNumberLabel.setPreferredSize(new Dimension(28, 18));
+
+            titleLabel = new JLabel("");
+            durationLabel = new JLabel("00:00", SwingConstants.RIGHT);
+
+            topRow.add(trackNumberLabel, BorderLayout.WEST);
+            topRow.add(titleLabel, BorderLayout.CENTER);
+            topRow.add(durationLabel, BorderLayout.EAST);
+
+            JPanel bottomRow = new JPanel(new BorderLayout(8, 0));
+            bottomRow.setOpaque(false);
+
+            artistLabel = new JLabel("");
+            artistLabel.setBorder(BorderFactory.createEmptyBorder(0, 36, 0, 0));
+            ratingLabel = new JLabel("—", SwingConstants.RIGHT);
+
+            bottomRow.add(artistLabel, BorderLayout.CENTER);
+            bottomRow.add(ratingLabel, BorderLayout.EAST);
+
+            linesPanel.add(topRow);
+            linesPanel.add(bottomRow);
+            add(linesPanel, BorderLayout.CENTER);
+        }
+
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+            int modelRow = (row >= 0 && row < table.getRowCount()) ? table.convertRowIndexToModel(row) : -1;
+            Track track = (modelRow >= 0) ? tableModel.getTrackAt(modelRow) : null;
+
+            Font baseFont = table.getFont();
+            if (baseFont != null && !baseFont.equals(cachedBaseFont)) {
+                cachedBaseFont = baseFont;
+                cachedBoldFont = baseFont.deriveFont(Font.BOLD);
+                cachedSecondaryFont = baseFont.deriveFont(Math.max(11f, baseFont.getSize2D() - 1f));
+            }
+            if (cachedBaseFont != null) {
+                trackNumberLabel.setFont(cachedBaseFont);
+                titleLabel.setFont(cachedBoldFont);
+                durationLabel.setFont(cachedBaseFont);
+                artistLabel.setFont(cachedSecondaryFont);
+                ratingLabel.setFont(cachedSecondaryFont);
+            }
+
+            if (track != null && track.getId() != null && track.getId().equals(currentPlayingTrackId)
+                    && (currentPlaybackState == PlaybackState.PLAYING || currentPlaybackState == PlaybackState.PAUSED)) {
+                if (currentPlaybackState == PlaybackState.PLAYING) {
+                    statusLabel.setIcon(playingIcon);
+                    statusLabel.setToolTipText(I18nManager.getInstance().get("status.playback_playing", "Playing"));
+                } else {
+                    statusLabel.setIcon(pausedIcon);
+                    statusLabel.setToolTipText(I18nManager.getInstance().get("status.playback_paused", "Paused"));
+                }
+            } else {
+                statusLabel.setIcon(null);
+                statusLabel.setToolTipText(null);
+            }
+
+            if (track != null) {
+                int trackNum = track.getTrackNumber();
+                trackNumberLabel.setText(trackNum > 0 ? String.valueOf(trackNum) : "-");
+                String rawTitle = track.getTitle() != null ? track.getTitle() : "";
+                if (track.isMissing()) {
+                    titleLabel.setText("⚠️ " + rawTitle);
+                    String warnTip = I18nManager.getInstance().get("missing.warning_tooltip");
+                    setToolTipText(warnTip);
+                    titleLabel.setToolTipText(warnTip);
+                } else {
+                    titleLabel.setText(rawTitle);
+                    setToolTipText(null);
+                    titleLabel.setToolTipText(null);
+                }
+                durationLabel.setText(TimeFormatter.format(track.getDurationSeconds()));
+                artistLabel.setText(track.getArtist() != null ? track.getArtist() : "");
+                int rating = track.getRating();
+                ratingLabel.setText((rating >= 1 && rating <= 5) ? "★".repeat(rating) : "—");
+            } else {
+                trackNumberLabel.setText("-");
+                titleLabel.setText(value != null ? value.toString() : "");
+                setToolTipText(null);
+                titleLabel.setToolTipText(null);
+                durationLabel.setText("00:00");
+                artistLabel.setText("");
+                ratingLabel.setText("—");
+            }
+
+            if (isSelected) {
+                setBackground(table.getSelectionBackground());
+                Color selFg = table.getSelectionForeground();
+                statusLabel.setForeground(selFg);
+                trackNumberLabel.setForeground(selFg);
+                titleLabel.setForeground(selFg);
+                durationLabel.setForeground(selFg);
+                artistLabel.setForeground(selFg);
+                ratingLabel.setForeground(selFg);
+            } else {
+                Color altBg = UIManager.getColor("Table.alternateRowColor");
+                if (row % 2 != 0 && altBg != null) {
+                    setBackground(altBg);
+                } else {
+                    setBackground(table.getBackground());
+                }
+                Color primaryFg = table.getForeground();
+                Color secondaryFg = UIManager.getColor("Label.disabledForeground");
+                if (secondaryFg == null) {
+                    secondaryFg = primaryFg;
+                }
+                statusLabel.setForeground(primaryFg);
+                trackNumberLabel.setForeground(secondaryFg);
+                titleLabel.setForeground(track != null && track.isMissing() ? new Color(220, 80, 80) : primaryFg);
+                durationLabel.setForeground(secondaryFg);
+                artistLabel.setForeground(secondaryFg);
+                ratingLabel.setForeground(secondaryFg);
+            }
+
+            return this;
+        }
+
+        public JLabel getStatusLabel() {
+            return statusLabel;
+        }
+
+        public JLabel getTrackNumberLabel() {
+            return trackNumberLabel;
+        }
+
+        public JLabel getTitleLabel() {
+            return titleLabel;
+        }
+
+        public JLabel getDurationLabel() {
+            return durationLabel;
+        }
+
+        public JLabel getArtistLabel() {
+            return artistLabel;
+        }
+
+        public JLabel getRatingLabel() {
+            return ratingLabel;
         }
     }
 }

@@ -77,7 +77,8 @@ public class JsonLibraryStorage implements LibraryStorage {
             Files.createDirectories(parent);
         }
 
-        String fileName = targetPath.getFileName().toString();
+        Path fileNamePath = targetPath.getFileName();
+        String fileName = fileNamePath != null ? fileNamePath.toString() : "library.json";
         Path backupPath = targetPath.resolveSibling(fileName + BACKUP_EXTENSION);
         Path tempPath = targetPath.resolveSibling(fileName + TEMP_EXTENSION);
 
@@ -135,7 +136,8 @@ public class JsonLibraryStorage implements LibraryStorage {
             throw new IllegalArgumentException("Source path cannot be null");
         }
 
-        String fileName = sourcePath.getFileName().toString();
+        Path fileNamePath = sourcePath.getFileName();
+        String fileName = fileNamePath != null ? fileNamePath.toString() : "library.json";
         Path backupPath = sourcePath.resolveSibling(fileName + BACKUP_EXTENSION);
 
         boolean primaryExists = Files.exists(sourcePath);

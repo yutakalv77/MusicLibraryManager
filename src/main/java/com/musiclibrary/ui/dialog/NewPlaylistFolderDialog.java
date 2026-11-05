@@ -19,6 +19,7 @@ import java.util.function.Consumer;
 /**
  * Modal dialog for creating a new playlist folder.
  */
+@SuppressWarnings({"this-escape"})
 public class NewPlaylistFolderDialog extends JDialog {
 
     private final JTextField folderNameField;

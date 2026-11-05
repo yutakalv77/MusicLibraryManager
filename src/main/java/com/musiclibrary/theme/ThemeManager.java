@@ -253,7 +253,8 @@ public class ThemeManager {
             ThemeConfig config = new ThemeConfig();
             config.theme = (currentTheme != null ? currentTheme : AppTheme.DARK).name();
 
-            String fileName = configPath.getFileName().toString();
+            Path fileNamePath = configPath.getFileName();
+            String fileName = fileNamePath != null ? fileNamePath.toString() : "theme.json";
             Path tempPath = configPath.resolveSibling(fileName + ".tmp");
 
             try {
@@ -308,7 +309,7 @@ public class ThemeManager {
                     "/v", "AppsUseLightTheme"
             ).start();
 
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (line.contains("AppsUseLightTheme")) {
@@ -329,7 +330,7 @@ public class ThemeManager {
     private boolean isMacInDarkMode() {
         try {
             Process process = new ProcessBuilder("defaults", "read", "-g", "AppleInterfaceStyle").start();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                 String line = reader.readLine();
                 return line != null && line.trim().equalsIgnoreCase("Dark");
             }
@@ -341,7 +342,7 @@ public class ThemeManager {
     private boolean isLinuxInDarkMode() {
         try {
             Process process = new ProcessBuilder("gsettings", "get", "org.gnome.desktop.interface", "color-scheme").start();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                 String line = reader.readLine();
                 return line != null && line.contains("prefer-dark");
             }

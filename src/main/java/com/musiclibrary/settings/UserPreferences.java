@@ -8,6 +8,7 @@ import java.util.Objects;
  * Serializable data model for storing persistent user preferences including
  * window bounds/state, theme, language, volume, and track table layout.
  */
+@SuppressWarnings("this-escape")
 public class UserPreferences {
 
     // Window settings
@@ -23,6 +24,9 @@ public class UserPreferences {
 
     // Playback settings
     private int volumePercent = 80;
+
+    // Split pane layout settings
+    private int rightPaneWidth = 400;
 
     // Table Column & Sort settings
     private List<ColumnConfig> columns = new ArrayList<>();
@@ -145,6 +149,14 @@ public class UserPreferences {
         this.volumePercent = Math.max(0, Math.min(100, volumePercent));
     }
 
+    public int getRightPaneWidth() {
+        return Math.max(150, rightPaneWidth);
+    }
+
+    public void setRightPaneWidth(int rightPaneWidth) {
+        this.rightPaneWidth = Math.max(150, rightPaneWidth);
+    }
+
     public List<ColumnConfig> getColumns() {
         if (columns == null || columns.isEmpty()) {
             initDefaultColumns();
@@ -179,9 +191,6 @@ public class UserPreferences {
         private int modelIndex;
         private int width;
         private boolean visible;
-
-        public ColumnConfig() {
-        }
 
         public ColumnConfig(int modelIndex, int width, boolean visible) {
             this.modelIndex = modelIndex;
@@ -261,10 +270,6 @@ public class UserPreferences {
 
         public String getSortOrder() {
             return sortOrder != null ? sortOrder : "UNSORTED";
-        }
-
-        public void setSortOrder(String sortOrder) {
-            this.sortOrder = sortOrder != null ? sortOrder : "UNSORTED";
         }
 
         @Override

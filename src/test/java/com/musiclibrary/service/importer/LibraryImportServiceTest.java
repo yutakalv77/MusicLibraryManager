@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
-import javax.swing.SwingUtilities;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;

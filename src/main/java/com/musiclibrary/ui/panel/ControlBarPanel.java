@@ -30,6 +30,7 @@ import java.util.function.LongConsumer;
  * Top control bar panel containing playback transport controls,
  * volume slider, LCD-style track display, search field, and theme toggle.
  */
+@SuppressWarnings({"this-escape"})
 public class ControlBarPanel extends JPanel {
 
     // Transport buttons
@@ -261,14 +262,6 @@ public class ControlBarPanel extends JPanel {
         }
     }
 
-    /**
-     * Updates track information displayed in the LCD panel.
-     *
-     * @param title       track title
-     * @param artist      track artist
-     * @param album       track album
-     * @param artworkData embedded artwork binary
-     */
     /**
      * Updates track information displayed in the LCD panel using the given Track entity.
      *

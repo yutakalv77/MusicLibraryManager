@@ -2,6 +2,7 @@ package com.musiclibrary.controller;
 
 import com.musiclibrary.i18n.I18nManager;
 import com.musiclibrary.model.Album;
+import com.musiclibrary.model.Artist;
 import com.musiclibrary.model.Library;
 import com.musiclibrary.model.Playlist;
 import com.musiclibrary.model.Track;
@@ -31,6 +32,7 @@ import java.util.function.Consumer;
  * {@link TrackTablePanel}, {@link FastSearchIndex}, and persistence via {@link LibraryStorage}.
  * Orchestrates playlist management (CRUD, reordering, drag-and-drop addition) and navigation views.
  */
+@SuppressWarnings("this-escape")
 public class LibraryController {
 
     /**
@@ -67,6 +69,7 @@ public class LibraryController {
 
     private SidebarPanel.LibrarySection currentSection = SidebarPanel.LibrarySection.ALL_SONGS;
     private String currentPlaylistId = null;
+    private boolean refreshingContent = false;
 
     private Consumer<List<Track>> onPlayTracksAction;
     private volatile boolean disposed = false;
@@ -282,12 +285,13 @@ public class LibraryController {
      * @param section target section
      */
     public void showLibrarySection(SidebarPanel.LibrarySection section) {
-        this.currentSection = (section != null) ? section : SidebarPanel.LibrarySection.ALL_SONGS;
+        SidebarPanel.LibrarySection targetSection = (section != null) ? section : SidebarPanel.LibrarySection.ALL_SONGS;
+        this.currentSection = targetSection;
         this.currentPlaylistId = null;
         this.trackTablePanel.setPlaylistContext(false);
 
         List<Track> tracks = new ArrayList<>(library.getTracks());
-        switch (this.currentSection) {
+        switch (targetSection) {
             case ARTISTS -> tracks.sort(Comparator.comparing(Track::getArtist, String.CASE_INSENSITIVE_ORDER)
                     .thenComparing(Track::getAlbum, String.CASE_INSENSITIVE_ORDER)
                     .thenComparingInt(Track::getTrackNumber));
@@ -301,7 +305,7 @@ public class LibraryController {
         }
 
         trackTablePanel.setTracks(tracks);
-        notifySectionChanged(this.currentSection);
+        notifySectionChanged(targetSection);
     }
 
     /**
@@ -347,14 +351,25 @@ public class LibraryController {
         this.trackTablePanel.setTracks(album.getTracks());
     }
 
+    /**
+     * Displays tracks belonging to a specific artist on TrackTablePanel.
+     *
+     * @param artist artist whose tracks to display
+     */
+    public void showArtist(Artist artist) {
+        if (artist == null) {
+            return;
+        }
+        this.currentSection = SidebarPanel.LibrarySection.ARTISTS;
+        this.currentPlaylistId = null;
+        this.trackTablePanel.setPlaylistContext(false);
+        this.trackTablePanel.setTracks(artist.getTracks());
+    }
+
     public void addNavigationListener(ViewNavigationListener listener) {
         if (listener != null) {
             navigationListeners.add(listener);
         }
-    }
-
-    public void removeNavigationListener(ViewNavigationListener listener) {
-        navigationListeners.remove(listener);
     }
 
     private void notifySectionChanged(SidebarPanel.LibrarySection section) {
@@ -381,10 +396,6 @@ public class LibraryController {
         }
     }
 
-    public void removeLibraryContentChangeListener(Runnable listener) {
-        libraryContentChangeListeners.remove(listener);
-    }
-
     private void notifyLibraryContentChanged() {
         for (Runnable listener : libraryContentChangeListeners) {
             try {
@@ -398,23 +409,24 @@ public class LibraryController {
      * Refreshes the currently displayed view (section or playlist).
      */
     public void refreshCurrentView() {
-        if (currentPlaylistId != null) {
-            showPlaylist(currentPlaylistId);
-        } else {
-            showLibrarySection(currentSection);
+        boolean previousRefreshing = this.refreshingContent;
+        this.refreshingContent = true;
+        try {
+            if (currentPlaylistId != null) {
+                showPlaylist(currentPlaylistId);
+            } else {
+                showLibrarySection(currentSection);
+            }
+        } finally {
+            this.refreshingContent = previousRefreshing;
         }
     }
 
-    // --- Deletion Handling ---
-
-    /**
-     * Deletes the currently selected tracks with context sensitivity:
-     * - In a Playlist: removes from the playlist only (non-destructive).
-     * - In a Library section: removes from library, cascading to all playlists and search index.
-     */
-    public void deleteSelectedTracks() {
-        deleteTracks(trackTablePanel.getSelectedTracks());
+    public boolean isRefreshingContent() {
+        return refreshingContent;
     }
+
+    // --- Deletion Handling ---
 
     /**
      * Deletes specified tracks with context sensitivity.
@@ -442,9 +454,9 @@ public class LibraryController {
                     searchIndex.removeTrack(t.getId());
                 }
             }
+            notifyLibraryContentChanged();
             refreshCurrentView();
             saveLibraryAsync();
-            notifyLibraryContentChanged();
         }
     }
 
@@ -524,9 +536,9 @@ public class LibraryController {
             if (searchIndex != null) {
                 searchIndex.indexTrack(track);
             }
+            notifyLibraryContentChanged();
             refreshCurrentView();
             saveLibraryAsync();
-            notifyLibraryContentChanged();
         }
         return relinked;
     }
@@ -557,6 +569,7 @@ public class LibraryController {
                     searchIndex.indexTrack(track);
                 }
                 runOnEdt(() -> {
+                    notifyLibraryContentChanged();
                     refreshCurrentView();
                     if (listener != null) {
                         listener.onRelinked(track, newPath);
@@ -568,6 +581,7 @@ public class LibraryController {
             @Override
             public void onComplete(int relinkedCount, int remainingCount) {
                 runOnEdt(() -> {
+                    notifyLibraryContentChanged();
                     refreshCurrentView();
                     if (listener != null) {
                         listener.onComplete(relinkedCount, remainingCount);
@@ -648,6 +662,7 @@ public class LibraryController {
                     if (searchIndex != null) {
                         searchIndex.indexTracks(library.getTracks());
                     }
+                    notifyLibraryContentChanged();
                     refreshCurrentView();
                     if (onCompleted != null) {
                         onCompleted.run();
@@ -655,7 +670,6 @@ public class LibraryController {
                 });
 
                 saveLibraryAsync();
-                notifyLibraryContentChanged();
             } catch (Throwable t) {
                 runOnEdt(() -> {
                     if (onError != null) {
@@ -686,14 +700,6 @@ public class LibraryController {
         return library;
     }
 
-    public SidebarPanel getSidebarPanel() {
-        return sidebarPanel;
-    }
-
-    public TrackTablePanel getTrackTablePanel() {
-        return trackTablePanel;
-    }
-
     public SidebarPanel.LibrarySection getCurrentSection() {
         return currentSection;
     }
@@ -708,14 +714,6 @@ public class LibraryController {
 
     public boolean isDisposed() {
         return disposed;
-    }
-
-    public MissingTrackResolver getMissingTrackResolver() {
-        return missingTrackResolver;
-    }
-
-    public TagWriter getTagWriter() {
-        return tagWriter;
     }
 
     public LibraryStorage getStorage() {

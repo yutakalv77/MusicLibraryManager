@@ -138,14 +138,6 @@ public class LibraryImportService {
         });
     }
 
-    public DuplicatePolicy getDuplicatePolicy() {
-        return duplicatePolicy;
-    }
-
-    public void setDuplicatePolicy(DuplicatePolicy duplicatePolicy) {
-        this.duplicatePolicy = Objects.requireNonNull(duplicatePolicy, "duplicatePolicy cannot be null");
-    }
-
     /**
      * Initiates an orderly shutdown of the importer worker thread pool.
      */
@@ -384,8 +376,8 @@ public class LibraryImportService {
                                 if (item.extractionFuture != null) {
                                     extracted = item.extractionFuture.join();
                                 }
-                            } catch (Exception e) {
-                                extracted = null;
+                            } catch (Exception ignored) {
+                                // Extraction failed, extracted remains null
                             }
 
                             if (extracted == null) {

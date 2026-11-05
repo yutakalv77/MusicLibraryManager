@@ -20,6 +20,7 @@ import java.util.function.Consumer;
  * Modular application menu bar providing hierarchical menus (File, Edit, View,
  * Controls, Account, Help) and action dispatch callbacks.
  */
+@SuppressWarnings({"this-escape"})
 public class AppMenuBar extends JMenuBar {
 
     // File Menu

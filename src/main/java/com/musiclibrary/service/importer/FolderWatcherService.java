@@ -27,11 +27,11 @@ public class FolderWatcherService {
 
     private final LibraryImportService importService;
     private final FileScanner fileScanner;
-    private ExecutorService workerPool;
+    private volatile ExecutorService workerPool;
 
-    private WatchService watchService;
+    private volatile WatchService watchService;
     private Thread watcherThread;
-    private Path watchedFolder;
+    private volatile Path watchedFolder;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     private Consumer<Path> onFileDetectedCallback;
@@ -135,7 +135,7 @@ public class FolderWatcherService {
      *
      * @return watched directory path
      */
-    public Path getWatchedFolder() {
+    public synchronized Path getWatchedFolder() {
         return watchedFolder;
     }
 
@@ -193,6 +193,7 @@ public class FolderWatcherService {
      * Waits until the file size remains non-zero and unchanging across checks,
      * indicating that file copy/download has finished.
      */
+    @SuppressWarnings("BusyWait")
     boolean waitForFileStability(Path file) {
         long startTime = System.currentTimeMillis();
         long lastSize = -1;

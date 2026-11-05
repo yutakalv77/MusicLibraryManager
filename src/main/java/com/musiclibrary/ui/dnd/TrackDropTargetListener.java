@@ -23,6 +23,7 @@ import java.util.Objects;
  * DropTargetListener that accepts external files and folders dragged from OS file managers
  * (Windows Explorer, macOS Finder), highlights the drop boundary, and passes paths to a callback.
  */
+@SuppressWarnings("this-escape")
 public class TrackDropTargetListener implements DropTargetListener {
 
     /**

@@ -60,10 +60,11 @@ public class SqliteLibraryStorage implements LibraryStorage {
     }
 
     private final java.util.concurrent.atomic.AtomicBoolean schemaInitialized = new java.util.concurrent.atomic.AtomicBoolean(false);
+    private final Object schemaInitLock = new Object();
 
     private void ensureInitialized() {
         if (!schemaInitialized.get()) {
-            synchronized (schemaInitialized) {
+            synchronized (schemaInitLock) {
                 if (!schemaInitialized.get()) {
                     try {
                         SchemaInitializer.initialize(dbManager);
@@ -123,15 +124,13 @@ public class SqliteLibraryStorage implements LibraryStorage {
 
             // 2. Save all playlists
             List<Playlist> playlists = library.getPlaylists();
-            if (playlists != null) {
-                for (Playlist pl : playlists) {
-                    Playlist targetPl = pl.toBuilder().accountId(accountId).build();
-                    playlistRepository.save(targetPl);
-                }
+            for (Playlist pl : playlists) {
+                Playlist targetPl = pl.toBuilder().accountId(accountId).build();
+                playlistRepository.save(targetPl);
             }
 
             LOGGER.log(System.Logger.Level.DEBUG, "Synchronized library to SQLite ({0} tracks, {1} playlists)",
-                    tracks.size(), playlists != null ? playlists.size() : 0);
+                    tracks.size(), playlists.size());
 
         } catch (Exception e) {
             throw new IOException("Failed to save library to SQLite database: " + e.getMessage(), e);
@@ -208,21 +207,5 @@ public class SqliteLibraryStorage implements LibraryStorage {
 
     public String getAccountId() {
         return accountId;
-    }
-
-    public DatabaseManager getDatabaseManager() {
-        return dbManager;
-    }
-
-    public AccountRepository getAccountRepository() {
-        return accountRepository;
-    }
-
-    public TrackRepository getTrackRepository() {
-        return trackRepository;
-    }
-
-    public PlaylistRepository getPlaylistRepository() {
-        return playlistRepository;
     }
 }

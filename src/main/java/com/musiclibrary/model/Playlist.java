@@ -12,6 +12,7 @@ import java.util.UUID;
  * Stores references to tracks via track ID list to prevent data desynchronization.
  * Supports accounts, hierarchical folder grouping, and ordering.
  */
+@SuppressWarnings("this-escape")
 public class Playlist {
 
     private String id;

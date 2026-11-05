@@ -7,6 +7,7 @@ import java.util.UUID;
 /**
  * Domain entity representing a user account / profile.
  */
+@SuppressWarnings("this-escape")
 public class Account {
 
     public static final String DEFAULT_ACCOUNT_ID = "default";

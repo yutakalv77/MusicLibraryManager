@@ -44,7 +44,7 @@ public class TrackTransferData implements Transferable {
     }
 
     @Override
-    public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException {
+    public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException {
         if (TRACK_ID_LIST_FLAVOR.equals(flavor)) {
             return Collections.unmodifiableList(trackIds);
         } else if (DataFlavor.stringFlavor.equals(flavor)) {
@@ -78,7 +78,7 @@ public class TrackTransferData implements Transferable {
             }
             if (transferable.isDataFlavorSupported(DataFlavor.stringFlavor)) {
                 String str = (String) transferable.getTransferData(DataFlavor.stringFlavor);
-                if (str != null && !str.isBlank()) {
+                if (!str.isBlank()) {
                     return Arrays.stream(str.split("\\r?\\n"))
                             .map(String::trim)
                             .filter(s -> !s.isEmpty())

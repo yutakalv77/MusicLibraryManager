@@ -29,7 +29,6 @@ import javax.swing.JSlider;
 import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.event.ActionEvent;
-import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -533,7 +532,8 @@ class MainFrameTest {
                 "sidebar.playlist.new_prompt",
                 "sidebar.playlist.rename_prompt",
                 "sidebar.playlist.confirm_delete",
-                "table.menu.delete_from_playlist"
+                "table.menu.delete_from_playlist",
+                "table.menu.open_folder"
         );
 
         for (String key : requiredPhase52Keys) {
@@ -715,6 +715,7 @@ class MainFrameTest {
 
             // Create playlist via controller
             Playlist playlist = libController.createPlaylist("Favorites");
+            com.musiclibrary.util.SwingUtils.runOnEdtAndWait(() -> {});
             assertThat(frame.getSidebarPanel().getCurrentPlaylists()).contains(playlist);
             assertThat(libController.getCurrentPlaylistId()).isEqualTo(playlist.getId());
 
@@ -916,7 +917,7 @@ class MainFrameTest {
             assertThat(frame.isVisible()).isTrue();
 
             // 2. Trigger via View Menu item (View menu index 2, item index 3 is miniPlayerItem)
-            JMenuItem miniPlayerMenuItem = (JMenuItem) frame.getJMenuBar().getMenu(2).getItem(3);
+            JMenuItem miniPlayerMenuItem = frame.getJMenuBar().getMenu(2).getItem(3);
             assertThat(miniPlayerMenuItem.getText()).isEqualTo("Mini Player");
             miniPlayerMenuItem.doClick();
             assertThat(frame.isVisible()).isFalse();
@@ -1338,6 +1339,7 @@ class MainFrameTest {
             assertThat(grid.getSavedScrollPosition()).isEqualTo(testScrollOffset);
             assertThat(grid.getLastSelectedAlbum()).isEqualTo(targetAlbum);
             assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+            assertThat(frame.getAlbumHeaderPanel().getAlbum()).isEqualTo(targetAlbum);
 
             // Simulate returning from album detail (clicking back button)
             frame.getAlbumHeaderPanel().getBackButton().doClick();

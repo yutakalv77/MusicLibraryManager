@@ -2,6 +2,7 @@ package com.musiclibrary.ui.panel;
 
 import com.musiclibrary.i18n.I18nManager;
 import com.musiclibrary.model.Album;
+import com.musiclibrary.model.Track;
 import com.musiclibrary.ui.layout.WrapLayout;
 
 import javax.swing.BorderFactory;
@@ -14,12 +15,14 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -27,6 +30,7 @@ import java.util.function.Consumer;
  * Features ultra-responsive incremental lazy chunk rendering (60 cards per chunk),
  * zero-blocking asynchronous artwork loading, and seamless search filtering.
  */
+@SuppressWarnings({"this-escape"})
 public class AlbumGridViewPanel extends JPanel {
 
     public static final int DEFAULT_CHUNK_SIZE = 60;
@@ -42,9 +46,10 @@ public class AlbumGridViewPanel extends JPanel {
     private Consumer<Album> onAlbumSelectedAction;
 
     private int renderedCount = 0;
-    private boolean isLoadingChunk = false;
+    private final java.util.concurrent.atomic.AtomicBoolean isLoadingChunk = new java.util.concurrent.atomic.AtomicBoolean(false);
     private int savedScrollPosition = 0;
     private Album lastSelectedAlbum = null;
+    private Album selectedAlbum = null;
 
     public AlbumGridViewPanel() {
         this(DEFAULT_CHUNK_SIZE);
@@ -53,11 +58,13 @@ public class AlbumGridViewPanel extends JPanel {
     public AlbumGridViewPanel(int chunkSize) {
         this.chunkSize = Math.max(1, chunkSize);
         setLayout(new BorderLayout());
+        setMinimumSize(new Dimension(150, 0));
 
         cardsPanel = new JPanel(new WrapLayout(FlowLayout.LEFT, 16, 16));
         cardsPanel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
         scrollPane = new JScrollPane(cardsPanel);
+        scrollPane.setMinimumSize(new Dimension(150, 0));
         scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
@@ -94,20 +101,31 @@ public class AlbumGridViewPanel extends JPanel {
      */
     public void setAlbums(List<Album> albums, boolean preserveScroll) {
         List<Album> newAlbums = (albums != null) ? List.copyOf(albums) : Collections.emptyList();
-        boolean sameContent = this.allAlbums.equals(newAlbums);
+        boolean sameContent = hasSameAlbumsContent(this.allAlbums, newAlbums);
 
         this.allAlbums = newAlbums;
         this.displayedAlbums = this.allAlbums;
 
         if (preserveScroll && sameContent && renderedCount > 0) {
+            if (selectedAlbum != null) {
+                selectedAlbum = findMatchingAlbum(selectedAlbum, this.displayedAlbums);
+                updateCardSelectionState();
+            }
             restoreScrollPosition();
         } else {
+            if (preserveScroll) {
+                if (selectedAlbum != null) {
+                    selectedAlbum = findMatchingAlbum(selectedAlbum, this.displayedAlbums);
+                }
+            } else {
+                savedScrollPosition = 0;
+                lastSelectedAlbum = null;
+                selectedAlbum = null;
+            }
             renderCards();
             if (preserveScroll) {
                 restoreScrollPosition();
             } else {
-                savedScrollPosition = 0;
-                lastSelectedAlbum = null;
                 scrollPane.getVerticalScrollBar().setValue(0);
             }
         }
@@ -132,8 +150,15 @@ public class AlbumGridViewPanel extends JPanel {
             }
             this.displayedAlbums = filtered;
         }
+        boolean hadSelection = (this.selectedAlbum != null);
+        if (this.selectedAlbum != null) {
+            this.selectedAlbum = findMatchingAlbum(this.selectedAlbum, this.displayedAlbums);
+        }
         renderCards();
         scrollPane.getVerticalScrollBar().setValue(0);
+        if (hadSelection && this.selectedAlbum == null && onAlbumSelectedAction != null) {
+            onAlbumSelectedAction.accept(null);
+        }
     }
 
     private void renderCards() {
@@ -162,7 +187,7 @@ public class AlbumGridViewPanel extends JPanel {
      * Checks scroll position and triggers loading of the next album chunk if near the bottom.
      */
     private void checkScrollAndLoadMore() {
-        if (isLoadingChunk || renderedCount >= displayedAlbums.size()) {
+        if (isLoadingChunk.get() || renderedCount >= displayedAlbums.size()) {
             return;
         }
         JScrollBar bar = scrollPane.getVerticalScrollBar();
@@ -177,15 +202,17 @@ public class AlbumGridViewPanel extends JPanel {
      * Incrementally loads and displays the next batch of album cards.
      */
     public synchronized void loadNextChunk() {
-        if (isLoadingChunk || renderedCount >= displayedAlbums.size()) {
+        if (renderedCount >= displayedAlbums.size() || !isLoadingChunk.compareAndSet(false, true)) {
             return;
         }
-        isLoadingChunk = true;
         try {
             int target = Math.min(renderedCount + chunkSize, displayedAlbums.size());
             for (int i = renderedCount; i < target; i++) {
                 Album album = displayedAlbums.get(i);
                 AlbumCardPanel card = new AlbumCardPanel(album, this::handleAlbumSelected);
+                if (selectedAlbum != null && isSameAlbum(album, selectedAlbum)) {
+                    card.setSelected(true);
+                }
                 cardPanels.add(card);
                 cardsPanel.add(card);
             }
@@ -193,14 +220,113 @@ public class AlbumGridViewPanel extends JPanel {
             cardsPanel.revalidate();
             cardsPanel.repaint();
         } finally {
-            isLoadingChunk = false;
+            isLoadingChunk.set(false);
         }
     }
 
     private void handleAlbumSelected(Album album) {
+        setSelectedAlbum(album);
         if (onAlbumSelectedAction != null) {
             onAlbumSelectedAction.accept(album);
         }
+    }
+
+    public void setSelectedAlbum(Album album) {
+        this.selectedAlbum = album;
+        if (album != null) {
+            this.lastSelectedAlbum = album;
+        }
+        updateCardSelectionState();
+    }
+
+    public Album getSelectedAlbum() {
+        return selectedAlbum;
+    }
+
+    private void updateCardSelectionState() {
+        for (AlbumCardPanel card : cardPanels) {
+            card.setSelected(selectedAlbum != null && isSameAlbum(card.getAlbum(), selectedAlbum));
+        }
+    }
+
+    private boolean isSameAlbum(Album a, Album b) {
+        if (a == b) {
+            return true;
+        }
+        if (a == null || b == null) {
+            return false;
+        }
+        return a.equals(b) ||
+                (a.getTitle().equalsIgnoreCase(b.getTitle()) &&
+                 a.getArtist().equalsIgnoreCase(b.getArtist()));
+    }
+
+    private Album findMatchingAlbum(Album target, List<Album> candidates) {
+        if (target == null || candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        for (Album a : candidates) {
+            if (isSameAlbum(a, target)) {
+                return a;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Deep-compares two album lists including track counts, durations, and individual track metadata.
+     */
+    public static boolean hasSameAlbumsContent(List<Album> aList, List<Album> bList) {
+        if (aList == bList) {
+            return true;
+        }
+        if (aList == null || bList == null || aList.size() != bList.size()) {
+            return false;
+        }
+        for (int i = 0; i < aList.size(); i++) {
+            Album a = aList.get(i);
+            Album b = bList.get(i);
+            if (!Objects.equals(a, b)
+                    || a.getTrackCount() != b.getTrackCount()
+                    || a.getTotalDurationSeconds() != b.getTotalDurationSeconds()
+                    || !hasSameTracksContent(a.getTracks(), b.getTracks())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static boolean hasSameTracksContent(List<Track> t1, List<Track> t2) {
+        if (t1 == t2) {
+            return true;
+        }
+        if (t1 == null || t2 == null || t1.size() != t2.size()) {
+            return false;
+        }
+        for (int i = 0; i < t1.size(); i++) {
+            Track a = t1.get(i);
+            Track b = t2.get(i);
+            if (a == null || b == null) {
+                if (a != b) return false;
+                continue;
+            }
+            if (!Objects.equals(a.getId(), b.getId())
+                    || !Objects.equals(a.getTitle(), b.getTitle())
+                    || !Objects.equals(a.getArtist(), b.getArtist())
+                    || !Objects.equals(a.getAlbum(), b.getAlbum())
+                    || a.getTrackNumber() != b.getTrackNumber()
+                    || a.getYear() != b.getYear()
+                    || a.getDurationSeconds() != b.getDurationSeconds()
+                    || a.getRating() != b.getRating()
+                    || a.isMissing() != b.isMissing()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public List<AlbumCardPanel> getCardPanels() {
+        return Collections.unmodifiableList(cardPanels);
     }
 
     public void setOnAlbumSelectedAction(Consumer<Album> action) {
@@ -222,10 +348,6 @@ public class AlbumGridViewPanel extends JPanel {
         return cardPanels.size();
     }
 
-    public int getChunkSize() {
-        return chunkSize;
-    }
-
     public void updateLanguage() {
         updateEmptyText();
         for (AlbumCardPanel card : cardPanels) {
@@ -244,19 +366,15 @@ public class AlbumGridViewPanel extends JPanel {
     }
 
     /**
-     * Saves the current vertical scroll position.
-     */
-    public void saveScrollPosition() {
-        this.savedScrollPosition = scrollPane.getVerticalScrollBar().getValue();
-    }
-
-    /**
      * Saves the current vertical scroll position and the selected album.
      *
      * @param album album selected before navigating away
      */
     public void saveScrollPosition(Album album) {
-        saveScrollPosition();
+        int currentVal = scrollPane.getVerticalScrollBar().getValue();
+        if (currentVal > 0) {
+            this.savedScrollPosition = currentVal;
+        }
         this.lastSelectedAlbum = album;
     }
 

@@ -28,10 +28,10 @@ class AlbumCardPanelTest {
 
         Track t1 = Track.builder().id("1").filePath("tracks/1.mp3").title("Song 1").artist("Queen").album("A Night at the Opera").year(1975).durationSeconds(200).build();
         Track t2 = Track.builder().id("2").filePath("tracks/2.mp3").title("Song 2").artist("Queen").album("A Night at the Opera").year(1975).durationSeconds(250).build();
-        sampleAlbum = Album.fromTracks(List.of(t1, t2)).get(0);
+        sampleAlbum = Album.fromTracks(List.of(t1, t2)).getFirst();
 
         Track single = Track.builder().id("s").filePath("tracks/s.mp3").title("Solo").artist("Artist").album("Single Album").year(2020).durationSeconds(180).build();
-        singleTrackAlbum = Album.fromTracks(List.of(single)).get(0);
+        singleTrackAlbum = Album.fromTracks(List.of(single)).getFirst();
     }
 
     @Test
@@ -133,5 +133,27 @@ class AlbumCardPanelTest {
         // Subsequent operations or re-disposals should complete safely
         card.dispose();
         card.updateLanguage();
+    }
+
+    @Test
+    @DisplayName("setSelected updates selection state and renders highlight safely")
+    void testSelectionStateAndPaint() {
+        AlbumCardPanel card = new AlbumCardPanel(sampleAlbum);
+        card.setSize(AlbumCardPanel.CARD_WIDTH, AlbumCardPanel.CARD_HEIGHT);
+
+        assertThat(card.isSelected()).isFalse();
+
+        card.setSelected(true);
+        assertThat(card.isSelected()).isTrue();
+
+        // Verify paintComponent with selected=true does not throw
+        java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(
+                AlbumCardPanel.CARD_WIDTH, AlbumCardPanel.CARD_HEIGHT, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.awt.Graphics2D g2 = img.createGraphics();
+        card.paint(g2);
+        g2.dispose();
+
+        card.setSelected(false);
+        assertThat(card.isSelected()).isFalse();
     }
 }

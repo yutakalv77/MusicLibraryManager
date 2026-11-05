@@ -217,8 +217,8 @@ public class Main {
                         saveAction.run();
                     } finally {
                         SwingUtilities.invokeLater(mainFrame::dispose);
-                        System.exit(0);
                     }
+                    System.exit(0);
                 }, "App-ShutdownWorker");
                 shutdownWorker.setDaemon(false);
                 shutdownWorker.start();

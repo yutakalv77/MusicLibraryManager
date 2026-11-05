@@ -7,6 +7,7 @@ import java.util.UUID;
 /**
  * Domain entity representing a playlist folder for hierarchical organization.
  */
+@SuppressWarnings("this-escape")
 public class PlaylistFolder {
 
     private String id;

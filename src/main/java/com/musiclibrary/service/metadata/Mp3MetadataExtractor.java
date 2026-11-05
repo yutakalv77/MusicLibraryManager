@@ -89,7 +89,7 @@ public class Mp3MetadataExtractor implements MetadataExtractor {
                 trackNumber = parseTrackNumber(id3v2.getTrack());
                 discNumber = parseDiscNumber(id3v2.getPartOfSet());
                 bpm = Math.max(0, id3v2.getBPM());
-                
+
                 // Check if artwork frame is present without loading/holding large binary in memory
                 if (id3v2.getFrameSets() != null &&
                         (id3v2.getFrameSets().containsKey("APIC") || id3v2.getFrameSets().containsKey("PIC"))) {
@@ -125,7 +125,8 @@ public class Mp3MetadataExtractor implements MetadataExtractor {
         }
 
         // 3. Smart completion for missing metadata
-        String rawFileName = filePath.getFileName() != null ? filePath.getFileName().toString() : "";
+        Path rawFileNamePath = filePath.getFileName();
+        String rawFileName = rawFileNamePath != null ? rawFileNamePath.toString() : "";
         String baseName = stripExtension(rawFileName);
 
         // Smart Title & Track Number from filename
@@ -155,8 +156,9 @@ public class Mp3MetadataExtractor implements MetadataExtractor {
         // Smart Album from parent directory
         if (album.isEmpty()) {
             Path parentDir = filePath.getParent();
-            if (parentDir != null && parentDir.getFileName() != null) {
-                album = parentDir.getFileName().toString().trim();
+            Path parentName = parentDir != null ? parentDir.getFileName() : null;
+            if (parentName != null) {
+                album = parentName.toString().trim();
             }
         }
 
@@ -165,8 +167,9 @@ public class Mp3MetadataExtractor implements MetadataExtractor {
             Path parentDir = filePath.getParent();
             if (parentDir != null) {
                 Path grandParentDir = parentDir.getParent();
-                if (grandParentDir != null && grandParentDir.getFileName() != null) {
-                    artist = grandParentDir.getFileName().toString().trim();
+                Path grandParentName = grandParentDir != null ? grandParentDir.getFileName() : null;
+                if (grandParentName != null) {
+                    artist = grandParentName.toString().trim();
                 }
             }
         }

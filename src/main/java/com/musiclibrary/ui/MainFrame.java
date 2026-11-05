@@ -5,7 +5,6 @@ import com.musiclibrary.controller.LibraryController;
 import com.musiclibrary.controller.PlayerController;
 import com.musiclibrary.controller.QueueChangeListener;
 import com.musiclibrary.controller.SearchController;
-import com.musiclibrary.i18n.AppLocale;
 import com.musiclibrary.i18n.I18nManager;
 import com.musiclibrary.i18n.LanguageChangeListener;
 import com.musiclibrary.model.Library;
@@ -23,17 +22,15 @@ import com.musiclibrary.service.importer.LibraryImportService;
 import com.musiclibrary.service.search.FastSearchIndex;
 import com.musiclibrary.service.storage.JsonLibraryStorage;
 import com.musiclibrary.service.storage.MissingTrackResolver;
-import com.musiclibrary.theme.AppTheme;
 import com.musiclibrary.theme.ThemeChangeListener;
 import com.musiclibrary.theme.ThemeManager;
 import com.musiclibrary.ui.dialog.ImportProgressDialog;
 import com.musiclibrary.ui.dialog.TagEditorDialog;
 import com.musiclibrary.ui.dnd.TrackDropTargetListener;
 import com.musiclibrary.model.Album;
+import com.musiclibrary.model.Artist;
 import com.musiclibrary.model.Account;
 import com.musiclibrary.model.PlaylistFolder;
-import com.musiclibrary.repository.AccountRepository;
-import com.musiclibrary.repository.PlaylistFolderRepository;
 import com.musiclibrary.repository.SqliteAccountRepository;
 import com.musiclibrary.repository.SqlitePlaylistFolderRepository;
 import com.musiclibrary.repository.db.DatabaseManager;
@@ -44,6 +41,7 @@ import com.musiclibrary.ui.dialog.AccountManagerDialog;
 import com.musiclibrary.ui.dialog.NewPlaylistFolderDialog;
 import com.musiclibrary.ui.panel.AlbumGridViewPanel;
 import com.musiclibrary.ui.panel.AlbumHeaderPanel;
+import com.musiclibrary.ui.panel.ArtistGridViewPanel;
 import com.musiclibrary.ui.menu.AppMenuBar;
 import com.musiclibrary.ui.panel.ControlBarPanel;
 import com.musiclibrary.ui.panel.SidebarPanel;
@@ -51,22 +49,21 @@ import com.musiclibrary.ui.panel.StatusBarPanel;
 import com.musiclibrary.ui.panel.TrackTablePanel;
 
 import javax.swing.BorderFactory;
-import javax.swing.ButtonGroup;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
-import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JSplitPane;
-import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
-import java.awt.event.KeyEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
@@ -80,12 +77,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 /**
  * Main application window coordinating top control bar, left sidebar,
  * center track table, and bottom status bar in a 3-pane responsive layout.
  */
+@SuppressWarnings({"this-escape"})
 public class MainFrame extends JFrame {
 
     private static final System.Logger LOGGER = System.getLogger(MainFrame.class.getName());
@@ -106,7 +103,12 @@ public class MainFrame extends JFrame {
     private final SidebarPanel sidebarPanel;
     private final TrackTablePanel trackTablePanel;
     private final AlbumGridViewPanel albumGridViewPanel;
+    private final ArtistGridViewPanel artistGridViewPanel;
     private final AlbumHeaderPanel albumHeaderPanel;
+    private final JPanel tableContainer;
+    private final JPanel tableCardPanel;
+    private final JPanel albumDetailContainer;
+    private final JSplitPane albumSplitPane;
     private final JPanel mainContentPanel;
     private final CardLayout cardLayout;
     private final StatusBarPanel statusBarPanel;
@@ -115,7 +117,11 @@ public class MainFrame extends JFrame {
     public static final String CARD_TABLE = "TABLE";
     public static final String CARD_ALBUMS = "ALBUMS";
     private boolean isAlbumGridActive = false;
+    private boolean isArtistGridActive = false;
+    private int rightPaneWidth = 400;
+    private boolean adjustingRightPaneDivider = false;
     private volatile List<Album> cachedAlbums = null;
+    private volatile List<Artist> cachedArtists = null;
 
     // Menu component
     private final AppMenuBar appMenuBar;
@@ -214,21 +220,52 @@ public class MainFrame extends JFrame {
         statusBarPanel = new StatusBarPanel();
 
         albumGridViewPanel = new AlbumGridViewPanel();
+        albumGridViewPanel.setMinimumSize(new Dimension(150, 0));
+        artistGridViewPanel = new ArtistGridViewPanel();
+        artistGridViewPanel.setMinimumSize(new Dimension(150, 0));
         albumHeaderPanel = new AlbumHeaderPanel();
         albumHeaderPanel.setVisible(false);
 
         albumGridViewPanel.setOnAlbumSelectedAction(this::openAlbumDetail);
+        artistGridViewPanel.setOnArtistSelectedAction(this::openArtistDetail);
         albumHeaderPanel.setOnBackAction(this::returnFromAlbumDetail);
 
         cardLayout = new CardLayout();
         mainContentPanel = new JPanel(cardLayout);
 
-        JPanel tableContainer = new JPanel(new BorderLayout());
+        tableContainer = new JPanel(new BorderLayout());
+        tableContainer.setMinimumSize(new Dimension(150, 0));
         tableContainer.add(albumHeaderPanel, BorderLayout.NORTH);
         tableContainer.add(trackTablePanel, BorderLayout.CENTER);
 
-        mainContentPanel.add(tableContainer, CARD_TABLE);
-        mainContentPanel.add(albumGridViewPanel, CARD_ALBUMS);
+        tableCardPanel = new JPanel(new BorderLayout());
+        tableCardPanel.add(tableContainer, BorderLayout.CENTER);
+
+        albumDetailContainer = new JPanel(new BorderLayout());
+        albumDetailContainer.setMinimumSize(new Dimension(150, 0));
+
+        albumSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, albumGridViewPanel, albumDetailContainer);
+        albumSplitPane.setDividerLocation(480);
+        albumSplitPane.setResizeWeight(1.0);
+        albumSplitPane.setContinuousLayout(true);
+        albumSplitPane.setBorder(BorderFactory.createEmptyBorder());
+        albumSplitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
+            if (!adjustingRightPaneDivider && albumSplitPane.getWidth() > 0) {
+                int currentRightWidth = albumSplitPane.getWidth() - albumSplitPane.getDividerLocation() - albumSplitPane.getDividerSize();
+                if (currentRightWidth >= 150) {
+                    rightPaneWidth = currentRightWidth;
+                }
+            }
+        });
+        albumSplitPane.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                applyRightPaneWidth();
+            }
+        });
+
+        mainContentPanel.add(tableCardPanel, CARD_TABLE);
+        mainContentPanel.add(albumSplitPane, CARD_ALBUMS);
 
         // 2. Wire Controller & Playback Actions
         this.playerController = (customPlayerController != null)
@@ -269,10 +306,24 @@ public class MainFrame extends JFrame {
                 this.controlBarPanel.getSearchField(),
                 this.trackTablePanel
         );
-        this.searchController.addMatchCountListener(count -> updateStatusBarSummary());
+        this.searchController.addMatchCountListener(count -> {
+            if ((isAlbumGridActive || isArtistGridActive) && trackTablePanel.getRowSorter() != null) {
+                trackTablePanel.getRowSorter().setRowFilter(null);
+            }
+            updateStatusBarSummary();
+        });
         this.searchController.addQueryListener(query -> {
             if (isAlbumGridActive) {
                 albumGridViewPanel.filterAlbums(query);
+                if (albumGridViewPanel.getSelectedAlbum() == null) {
+                    clearAlbumDetail();
+                }
+                updateStatusBarSummary();
+            } else if (isArtistGridActive) {
+                artistGridViewPanel.filterArtists(query);
+                if (artistGridViewPanel.getSelectedArtist() == null) {
+                    clearArtistDetail();
+                }
                 updateStatusBarSummary();
             }
         });
@@ -294,11 +345,31 @@ public class MainFrame extends JFrame {
             @Override
             public void onSectionChanged(SidebarPanel.LibrarySection section) {
                 if (section == SidebarPanel.LibrarySection.ALBUMS) {
-                    showAlbumGrid();
+                    if (isAlbumGridActive && libraryController.isRefreshingContent()) {
+                        Album previousSelectedAlbum = getSelectedAlbumForRefresh();
+                        refreshActiveAlbumGridPreservingState(previousSelectedAlbum);
+                    } else {
+                        showAlbumGrid();
+                    }
+                } else if (section == SidebarPanel.LibrarySection.ARTISTS) {
+                    if (isArtistGridActive && libraryController.isRefreshingContent()) {
+                        Artist previousSelectedArtist = getSelectedArtistForRefresh();
+                        refreshActiveArtistGridPreservingState(previousSelectedArtist);
+                    } else {
+                        showArtistGrid();
+                    }
                 } else {
                     isAlbumGridActive = false;
+                    isArtistGridActive = false;
+                    albumGridViewPanel.setSelectedAlbum(null);
+                    artistGridViewPanel.setSelectedArtist(null);
+                    albumHeaderPanel.setAlbum(null);
                     albumHeaderPanel.setVisible(false);
+                    attachTableToCardView();
                     cardLayout.show(mainContentPanel, CARD_TABLE);
+                    if (searchController.hasActiveFilter()) {
+                        searchController.applyFilter();
+                    }
                 }
                 updateStatusBarSummary();
             }
@@ -306,8 +377,16 @@ public class MainFrame extends JFrame {
             @Override
             public void onPlaylistChanged(String playlistId) {
                 isAlbumGridActive = false;
+                isArtistGridActive = false;
+                albumGridViewPanel.setSelectedAlbum(null);
+                artistGridViewPanel.setSelectedArtist(null);
+                albumHeaderPanel.setAlbum(null);
                 albumHeaderPanel.setVisible(false);
+                attachTableToCardView();
                 cardLayout.show(mainContentPanel, CARD_TABLE);
+                if (searchController.hasActiveFilter()) {
+                    searchController.applyFilter();
+                }
                 updateStatusBarSummary();
             }
         });
@@ -345,7 +424,7 @@ public class MainFrame extends JFrame {
 
         this.libraryController.setOnPlayTracksAction(tracks -> {
             if (!tracks.isEmpty()) {
-                this.playerController.play(tracks.get(0), tracks);
+                this.playerController.play(tracks.getFirst(), tracks);
             }
         });
 
@@ -372,9 +451,7 @@ public class MainFrame extends JFrame {
         appMenuBar.setOnRescanLibraryAction(this::rescanLibrary);
         appMenuBar.setOnRescanMissingAction(this::rescanAndRelinkMissing);
         appMenuBar.setOnExitAction(() -> {
-            if (audioPlayer != null) {
-                audioPlayer.stop();
-            }
+            audioPlayer.stop();
             dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING));
         });
         appMenuBar.setOnEditTagsAction(this::openTagEditorForSelection);
@@ -420,12 +497,10 @@ public class MainFrame extends JFrame {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                if (audioPlayer != null) {
-                    try {
-                        audioPlayer.stop();
-                    } catch (Exception ex) {
-                        LOGGER.log(System.Logger.Level.WARNING, "Error stopping audio on window closing: " + ex.getMessage(), ex);
-                    }
+                try {
+                    audioPlayer.stop();
+                } catch (Exception ex) {
+                    LOGGER.log(System.Logger.Level.WARNING, "Error stopping audio on window closing: " + ex.getMessage(), ex);
                 }
             }
         });
@@ -753,7 +828,9 @@ public class MainFrame extends JFrame {
 
             @Override
             public void onBatchImported(List<Track> importedBatch) {
-                trackTablePanel.addTracks(importedBatch);
+                if (!isAlbumGridActive && !isArtistGridActive) {
+                    trackTablePanel.addTracks(importedBatch);
+                }
                 if (searchIndex != null) {
                     searchIndex.indexTracks(importedBatch);
                 }
@@ -875,7 +952,9 @@ public class MainFrame extends JFrame {
                     }
                 }
                 // High-performance batch addition directly into table model without full reload
-                trackTablePanel.addTracks(importedBatch);
+                if (!isAlbumGridActive && !isArtistGridActive) {
+                    trackTablePanel.addTracks(importedBatch);
+                }
                 if (searchIndex != null) {
                     searchIndex.indexTracks(importedBatch);
                 }
@@ -930,10 +1009,11 @@ public class MainFrame extends JFrame {
     }
 
     /**
-     * Invalidate cached aggregated albums so they are recomputed upon next request.
+     * Invalidate cached aggregated albums and artists so they are recomputed upon next request.
      */
     public void invalidateAlbumCache() {
         this.cachedAlbums = null;
+        this.cachedArtists = null;
     }
 
     /**
@@ -949,9 +1029,263 @@ public class MainFrame extends JFrame {
     }
 
     /**
+     * Retrieves cached artist list or computes it from library tracks if cache is empty.
+     */
+    public List<Artist> getOrComputeArtists() {
+        List<Artist> local = this.cachedArtists;
+        if (local == null) {
+            local = Artist.fromTracks(this.library.getTracks());
+            this.cachedArtists = local;
+        }
+        return local;
+    }
+
+    private void attachTableToCardView() {
+        if (trackTablePanel != null) {
+            trackTablePanel.setCompactTwoLineMode(false);
+        }
+        if (albumHeaderPanel != null) {
+            albumHeaderPanel.setVisible(false);
+        }
+        if (tableCardPanel != null && tableContainer != null && tableContainer.getParent() != tableCardPanel) {
+            tableCardPanel.add(tableContainer, BorderLayout.CENTER);
+            if (albumDetailContainer != null) {
+                albumDetailContainer.revalidate();
+                albumDetailContainer.repaint();
+            }
+            tableCardPanel.revalidate();
+            tableCardPanel.repaint();
+        }
+    }
+
+    private void attachTableToAlbumSplitView() {
+        if (trackTablePanel != null) {
+            trackTablePanel.setCompactTwoLineMode(true);
+        }
+        if (albumHeaderPanel != null) {
+            boolean hasSelected = albumHeaderPanel.getAlbum() != null
+                    || albumHeaderPanel.getArtist() != null
+                    || (isAlbumGridActive && albumGridViewPanel != null && albumGridViewPanel.getSelectedAlbum() != null)
+                    || (isArtistGridActive && artistGridViewPanel != null && artistGridViewPanel.getSelectedArtist() != null);
+            albumHeaderPanel.setVisible(hasSelected);
+        }
+        if (albumDetailContainer != null && tableContainer != null && tableContainer.getParent() != albumDetailContainer) {
+            albumDetailContainer.add(tableContainer, BorderLayout.CENTER);
+            if (tableCardPanel != null) {
+                tableCardPanel.revalidate();
+                tableCardPanel.repaint();
+            }
+            albumDetailContainer.revalidate();
+            albumDetailContainer.repaint();
+        }
+    }
+
+    private void setSplitPaneLeftComponent(JPanel leftPanel) {
+        if (albumSplitPane != null && leftPanel != null && albumSplitPane.getLeftComponent() != leftPanel) {
+            adjustingRightPaneDivider = true;
+            try {
+                int divLoc = albumSplitPane.getDividerLocation();
+                albumSplitPane.setLeftComponent(leftPanel);
+                if (albumSplitPane.getWidth() > 0) {
+                    int targetDivider = albumSplitPane.getWidth() - rightPaneWidth - albumSplitPane.getDividerSize();
+                    albumSplitPane.setDividerLocation(Math.max(150, targetDivider));
+                } else {
+                    albumSplitPane.setDividerLocation(divLoc > 0 ? divLoc : 480);
+                }
+            } finally {
+                adjustingRightPaneDivider = false;
+            }
+            albumSplitPane.revalidate();
+            albumSplitPane.repaint();
+        }
+    }
+
+    /**
+     * Applies the remembered right pane width to the album/artist split pane divider.
+     */
+    public void applyRightPaneWidth() {
+        if (albumSplitPane != null && albumSplitPane.getWidth() > 0) {
+            int maxDivider = Math.max(150, albumSplitPane.getWidth() - 150 - albumSplitPane.getDividerSize());
+            int rawDivider = albumSplitPane.getWidth() - rightPaneWidth - albumSplitPane.getDividerSize();
+            int targetDivider = Math.max(150, Math.min(maxDivider, rawDivider));
+            adjustingRightPaneDivider = true;
+            try {
+                albumSplitPane.setDividerLocation(targetDivider);
+            } finally {
+                adjustingRightPaneDivider = false;
+            }
+        }
+    }
+
+    public int getRightPaneWidth() {
+        return rightPaneWidth;
+    }
+
+    public void setRightPaneWidth(int rightPaneWidth) {
+        this.rightPaneWidth = Math.max(150, rightPaneWidth);
+        applyRightPaneWidth();
+    }
+
+    private void clearAlbumDetail() {
+        if (albumGridViewPanel != null) {
+            albumGridViewPanel.setSelectedAlbum(null);
+        }
+        if (albumHeaderPanel != null) {
+            albumHeaderPanel.setAlbum(null);
+            albumHeaderPanel.setVisible(false);
+        }
+        if (trackTablePanel != null) {
+            trackTablePanel.setPlaylistContext(false);
+            trackTablePanel.setTracks(List.of());
+        }
+        if (albumDetailContainer != null) {
+            albumDetailContainer.revalidate();
+            albumDetailContainer.repaint();
+        }
+    }
+
+    private void clearArtistDetail() {
+        if (artistGridViewPanel != null) {
+            artistGridViewPanel.setSelectedArtist(null);
+        }
+        if (albumHeaderPanel != null) {
+            albumHeaderPanel.setArtist(null);
+            albumHeaderPanel.setVisible(false);
+        }
+        if (trackTablePanel != null) {
+            trackTablePanel.setPlaylistContext(false);
+            trackTablePanel.setTracks(List.of());
+        }
+        if (albumDetailContainer != null) {
+            albumDetailContainer.revalidate();
+            albumDetailContainer.repaint();
+        }
+    }
+
+    private Album getSelectedAlbumForRefresh() {
+        if (albumGridViewPanel != null && albumGridViewPanel.getSelectedAlbum() != null) {
+            return albumGridViewPanel.getSelectedAlbum();
+        }
+        if (albumHeaderPanel != null && albumHeaderPanel.isVisible()) {
+            return albumHeaderPanel.getAlbum();
+        }
+        return null;
+    }
+
+    private Artist getSelectedArtistForRefresh() {
+        if (artistGridViewPanel != null && artistGridViewPanel.getSelectedArtist() != null) {
+            return artistGridViewPanel.getSelectedArtist();
+        }
+        if (albumHeaderPanel != null && albumHeaderPanel.isVisible()) {
+            return albumHeaderPanel.getArtist();
+        }
+        return null;
+    }
+
+    private void refreshActiveAlbumGridPreservingState(Album previousSelectedAlbum) {
+        if (albumGridViewPanel != null) {
+            albumGridViewPanel.saveScrollPosition(previousSelectedAlbum);
+        }
+        showAlbumGrid(true);
+        if (previousSelectedAlbum != null && albumGridViewPanel != null) {
+            Album match = findMatchingAlbum(previousSelectedAlbum, albumGridViewPanel.getDisplayedAlbums());
+            if (match != null) {
+                openAlbumDetail(match);
+            } else {
+                clearAlbumDetail();
+            }
+        } else {
+            clearAlbumDetail();
+        }
+    }
+
+    private void refreshActiveArtistGridPreservingState(Artist previousSelectedArtist) {
+        if (artistGridViewPanel != null) {
+            artistGridViewPanel.saveScrollPosition(previousSelectedArtist);
+        }
+        showArtistGrid(true);
+        if (previousSelectedArtist != null && artistGridViewPanel != null) {
+            Artist match = findMatchingArtist(previousSelectedArtist, artistGridViewPanel.getDisplayedArtists());
+            if (match != null) {
+                openArtistDetail(match);
+            } else {
+                clearArtistDetail();
+            }
+        } else {
+            clearArtistDetail();
+        }
+    }
+
+    private Album findMatchingAlbum(Album target, List<Album> candidates) {
+        if (target == null || candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        for (Album a : candidates) {
+            if (a.getTitle().equalsIgnoreCase(target.getTitle())
+                    && a.getArtist().equalsIgnoreCase(target.getArtist())) {
+                return a;
+            }
+        }
+        // Fallback: if album title/artist was edited via TagEditDialog, match by shared track ID
+        if (target.getTracks() != null && !target.getTracks().isEmpty()) {
+            java.util.Set<String> targetTrackIds = new java.util.HashSet<>();
+            for (Track t : target.getTracks()) {
+                if (t != null && t.getId() != null) {
+                    targetTrackIds.add(t.getId());
+                }
+            }
+            if (!targetTrackIds.isEmpty()) {
+                for (Album a : candidates) {
+                    for (Track t : a.getTracks()) {
+                        if (t != null && t.getId() != null && targetTrackIds.contains(t.getId())) {
+                            return a;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private Artist findMatchingArtist(Artist target, List<Artist> candidates) {
+        if (target == null || candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        for (Artist a : candidates) {
+            if (a.getName().equalsIgnoreCase(target.getName())) {
+                return a;
+            }
+        }
+        // Fallback: if artist name was edited via TagEditDialog, match by shared track ID
+        if (target.getTracks() != null && !target.getTracks().isEmpty()) {
+            java.util.Set<String> targetTrackIds = new java.util.HashSet<>();
+            for (Track t : target.getTracks()) {
+                if (t != null && t.getId() != null) {
+                    targetTrackIds.add(t.getId());
+                }
+            }
+            if (!targetTrackIds.isEmpty()) {
+                for (Artist a : candidates) {
+                    for (Track t : a.getTracks()) {
+                        if (t != null && t.getId() != null && targetTrackIds.contains(t.getId())) {
+                            return a;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Synchronizes view tables and summary panels with current Library content.
      */
     public void refreshLibraryView() {
+        boolean wasAlbumGridActive = isAlbumGridActive;
+        boolean wasArtistGridActive = isArtistGridActive;
+        Album previousSelectedAlbum = getSelectedAlbumForRefresh();
+        Artist previousSelectedArtist = getSelectedArtistForRefresh();
+
         invalidateAlbumCache();
         if (libraryController != null) {
             libraryController.refreshCurrentView();
@@ -964,24 +1298,10 @@ public class MainFrame extends JFrame {
             searchIndex.clear();
             searchIndex.indexTracks(library.getTracks());
         }
-        if (isAlbumGridActive) {
-            showAlbumGrid();
-        } else if (albumHeaderPanel != null && albumHeaderPanel.isVisible() && albumHeaderPanel.getAlbum() != null) {
-            Album current = albumHeaderPanel.getAlbum();
-            List<Album> refreshedAlbums = getOrComputeAlbums();
-            Album match = null;
-            for (Album a : refreshedAlbums) {
-                if (a.getTitle().equalsIgnoreCase(current.getTitle()) &&
-                    a.getArtist().equalsIgnoreCase(current.getArtist())) {
-                    match = a;
-                    break;
-                }
-            }
-            if (match != null) {
-                openAlbumDetail(match);
-            } else {
-                showAlbumGrid();
-            }
+        if (wasAlbumGridActive) {
+            refreshActiveAlbumGridPreservingState(previousSelectedAlbum);
+        } else if (wasArtistGridActive) {
+            refreshActiveArtistGridPreservingState(previousSelectedArtist);
         }
         if (searchController != null) {
             searchController.applyFilter();
@@ -1003,17 +1323,21 @@ public class MainFrame extends JFrame {
      */
     public void showAlbumGrid(boolean restoreScroll) {
         isAlbumGridActive = true;
-        if (albumHeaderPanel != null) {
-            albumHeaderPanel.setVisible(false);
+        isArtistGridActive = false;
+        if (artistGridViewPanel != null) {
+            artistGridViewPanel.setSelectedArtist(null);
         }
+        setSplitPaneLeftComponent(albumGridViewPanel);
+        attachTableToAlbumSplitView();
+        clearAlbumDetail();
         if (albumGridViewPanel != null) {
             List<Album> albums = getOrComputeAlbums();
             String currentQuery = (controlBarPanel != null && controlBarPanel.getSearchField() != null)
                     ? controlBarPanel.getSearchField().getText() : null;
 
             if (restoreScroll) {
-                // If albums have not changed, avoid re-rendering to achieve instant response and preserve scroll
-                if (!albums.equals(albumGridViewPanel.getAllAlbums())) {
+                // If albums have not changed in content, avoid re-rendering to achieve instant response and preserve scroll
+                if (!AlbumGridViewPanel.hasSameAlbumsContent(albums, albumGridViewPanel.getAllAlbums())) {
                     albumGridViewPanel.setAlbums(albums, true);
                     if (currentQuery != null && !currentQuery.isBlank()) {
                         albumGridViewPanel.filterAlbums(currentQuery);
@@ -1029,6 +1353,8 @@ public class MainFrame extends JFrame {
         if (cardLayout != null && mainContentPanel != null) {
             cardLayout.show(mainContentPanel, CARD_ALBUMS);
         }
+        applyRightPaneWidth();
+        SwingUtilities.invokeLater(this::applyRightPaneWidth);
         if (restoreScroll && albumGridViewPanel != null) {
             albumGridViewPanel.restoreScrollPosition();
         }
@@ -1039,22 +1365,38 @@ public class MainFrame extends JFrame {
      * Navigates back to album grid view from album detail, preserving scroll position.
      */
     public void returnFromAlbumDetail() {
-        showAlbumGrid(true);
+        if (isArtistGridActive) {
+            showArtistGrid(true);
+        } else {
+            showAlbumGrid(true);
+        }
     }
 
     /**
-     * Navigates to album detail view displaying the album header and its tracks.
+     * Displays the selected album's header and tracks in the right pane of the album split view.
      *
-     * @param album selected album
+     * @param album selected album (or null to clear right pane)
      */
     public void openAlbumDetail(Album album) {
         if (album == null) {
+            clearAlbumDetail();
+            updateStatusBarSummary();
             return;
         }
-        if (albumGridViewPanel != null) {
-            albumGridViewPanel.saveScrollPosition(album);
+        isAlbumGridActive = true;
+        isArtistGridActive = false;
+        if (artistGridViewPanel != null) {
+            artistGridViewPanel.setSelectedArtist(null);
         }
-        isAlbumGridActive = false;
+        setSplitPaneLeftComponent(albumGridViewPanel);
+        attachTableToAlbumSplitView();
+        if (albumGridViewPanel != null) {
+            if (albumGridViewPanel.getAllAlbums().isEmpty() && !library.getTracks().isEmpty()) {
+                albumGridViewPanel.setAlbums(getOrComputeAlbums(), false);
+            }
+            albumGridViewPanel.saveScrollPosition(album);
+            albumGridViewPanel.setSelectedAlbum(album);
+        }
         if (albumHeaderPanel != null) {
             albumHeaderPanel.setAlbum(album);
             albumHeaderPanel.setVisible(true);
@@ -1065,8 +1407,114 @@ public class MainFrame extends JFrame {
             trackTablePanel.setPlaylistContext(false);
             trackTablePanel.setTracks(album.getTracks());
         }
+        if (trackTablePanel != null && trackTablePanel.getRowSorter() != null) {
+            trackTablePanel.getRowSorter().setRowFilter(null);
+        }
         if (cardLayout != null && mainContentPanel != null) {
-            cardLayout.show(mainContentPanel, CARD_TABLE);
+            cardLayout.show(mainContentPanel, CARD_ALBUMS);
+        }
+        if (albumDetailContainer != null) {
+            albumDetailContainer.revalidate();
+            albumDetailContainer.repaint();
+        }
+        updateStatusBarSummary();
+    }
+
+    /**
+     * Navigates to artist grid view displaying all library artists, resetting scroll position.
+     */
+    public void showArtistGrid() {
+        showArtistGrid(false);
+    }
+
+    /**
+     * Navigates to artist grid view displaying all library artists, optionally restoring scroll position.
+     *
+     * @param restoreScroll true to restore the previous scroll position and selected artist
+     */
+    public void showArtistGrid(boolean restoreScroll) {
+        isArtistGridActive = true;
+        isAlbumGridActive = false;
+        if (albumGridViewPanel != null) {
+            albumGridViewPanel.setSelectedAlbum(null);
+        }
+        setSplitPaneLeftComponent(artistGridViewPanel);
+        attachTableToAlbumSplitView();
+        clearArtistDetail();
+        if (artistGridViewPanel != null) {
+            List<Artist> artists = getOrComputeArtists();
+            String currentQuery = (controlBarPanel != null && controlBarPanel.getSearchField() != null)
+                    ? controlBarPanel.getSearchField().getText() : null;
+
+            if (restoreScroll) {
+                if (!ArtistGridViewPanel.hasSameArtistsContent(artists, artistGridViewPanel.getAllArtists())) {
+                    artistGridViewPanel.setArtists(artists, true);
+                    if (currentQuery != null && !currentQuery.isBlank()) {
+                        artistGridViewPanel.filterArtists(currentQuery);
+                    }
+                }
+            } else {
+                artistGridViewPanel.setArtists(artists, false);
+                if (currentQuery != null && !currentQuery.isBlank()) {
+                    artistGridViewPanel.filterArtists(currentQuery);
+                }
+            }
+        }
+        if (cardLayout != null && mainContentPanel != null) {
+            cardLayout.show(mainContentPanel, CARD_ALBUMS);
+        }
+        applyRightPaneWidth();
+        SwingUtilities.invokeLater(this::applyRightPaneWidth);
+        if (restoreScroll && artistGridViewPanel != null) {
+            artistGridViewPanel.restoreScrollPosition();
+        }
+        updateStatusBarSummary();
+    }
+
+    /**
+     * Displays the selected artist's header and tracks in the right pane of the split view.
+     *
+     * @param artist selected artist (or null to clear right pane)
+     */
+    public void openArtistDetail(Artist artist) {
+        if (artist == null) {
+            clearArtistDetail();
+            updateStatusBarSummary();
+            return;
+        }
+        isArtistGridActive = true;
+        isAlbumGridActive = false;
+        if (albumGridViewPanel != null) {
+            albumGridViewPanel.setSelectedAlbum(null);
+        }
+        setSplitPaneLeftComponent(artistGridViewPanel);
+        attachTableToAlbumSplitView();
+        if (artistGridViewPanel != null) {
+            if (artistGridViewPanel.getAllArtists().isEmpty() && !library.getTracks().isEmpty()) {
+                artistGridViewPanel.setArtists(getOrComputeArtists(), false);
+            }
+            artistGridViewPanel.saveScrollPosition(artist);
+            artistGridViewPanel.setSelectedArtist(artist);
+        }
+        if (albumHeaderPanel != null) {
+            albumHeaderPanel.setArtist(artist);
+            albumHeaderPanel.setVisible(true);
+        }
+        if (this.libraryController != null) {
+            this.libraryController.showArtist(artist);
+        } else {
+            trackTablePanel.setPlaylistContext(false);
+            trackTablePanel.setTracks(artist.getTracks());
+        }
+        if (trackTablePanel != null && trackTablePanel.getRowSorter() != null) {
+            trackTablePanel.getRowSorter().setRowFilter(null);
+        }
+        if (cardLayout != null && mainContentPanel != null) {
+            cardLayout.show(mainContentPanel, CARD_ALBUMS);
+        }
+        if (albumDetailContainer != null) {
+            albumDetailContainer.revalidate();
+            albumDetailContainer.repaint();
         }
         updateStatusBarSummary();
     }
@@ -1076,10 +1524,31 @@ public class MainFrame extends JFrame {
             return;
         }
         if (isAlbumGridActive && albumGridViewPanel != null) {
+            if (albumGridViewPanel.getSelectedAlbum() != null && trackTablePanel != null) {
+                TrackTablePanel.TableSummary summary = trackTablePanel.getVisibleSummary();
+                statusBarPanel.updateSummary(summary.trackCount(), summary.totalDurationSeconds(), summary.totalFileSizeBytes());
+                return;
+            }
             List<Album> displayed = albumGridViewPanel.getDisplayedAlbums();
             int totalTracks = 0;
             long totalDuration = 0;
             for (Album a : displayed) {
+                totalTracks += a.getTrackCount();
+                totalDuration += a.getTotalDurationSeconds();
+            }
+            statusBarPanel.updateSummary(totalTracks, totalDuration, 0);
+            return;
+        }
+        if (isArtistGridActive && artistGridViewPanel != null) {
+            if (artistGridViewPanel.getSelectedArtist() != null && trackTablePanel != null) {
+                TrackTablePanel.TableSummary summary = trackTablePanel.getVisibleSummary();
+                statusBarPanel.updateSummary(summary.trackCount(), summary.totalDurationSeconds(), summary.totalFileSizeBytes());
+                return;
+            }
+            List<Artist> displayed = artistGridViewPanel.getDisplayedArtists();
+            int totalTracks = 0;
+            long totalDuration = 0;
+            for (Artist a : displayed) {
                 totalTracks += a.getTrackCount();
                 totalDuration += a.getTotalDurationSeconds();
             }
@@ -1108,6 +1577,9 @@ public class MainFrame extends JFrame {
         trackTablePanel.updateLanguage();
         if (albumGridViewPanel != null) {
             albumGridViewPanel.updateLanguage();
+        }
+        if (artistGridViewPanel != null) {
+            artistGridViewPanel.updateLanguage();
         }
         if (albumHeaderPanel != null) {
             albumHeaderPanel.updateLanguage();
@@ -1270,12 +1742,24 @@ public class MainFrame extends JFrame {
         return albumGridViewPanel;
     }
 
+    public ArtistGridViewPanel getArtistGridViewPanel() {
+        return artistGridViewPanel;
+    }
+
     public AlbumHeaderPanel getAlbumHeaderPanel() {
         return albumHeaderPanel;
     }
 
+    public JSplitPane getAlbumSplitPane() {
+        return albumSplitPane;
+    }
+
     public boolean isAlbumGridActive() {
         return isAlbumGridActive;
+    }
+
+    public boolean isArtistGridActive() {
+        return isArtistGridActive;
     }
 
     public JPanel getMainContentPanel() {
@@ -1434,14 +1918,14 @@ public class MainFrame extends JFrame {
                 return;
             }
         }
-        if (accountRepository == null && dbManager != null) {
+        if (accountRepository == null) {
             try {
                 accountRepository = new SqliteAccountRepository(dbManager);
             } catch (Exception e) {
                 LOGGER.log(System.Logger.Level.ERROR, "Could not create account repository: " + e.getMessage(), e);
             }
         }
-        if (folderRepository == null && dbManager != null) {
+        if (folderRepository == null) {
             try {
                 folderRepository = new SqlitePlaylistFolderRepository(dbManager);
             } catch (Exception e) {

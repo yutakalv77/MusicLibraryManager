@@ -175,12 +175,11 @@ public class MissingTrackResolver {
             return null;
         }
 
-        Path origPath = null;
         String origFileName = "";
         String origBaseName = "";
         try {
             if (track.getFilePath() != null && !track.getFilePath().isBlank()) {
-                origPath = Path.of(track.getFilePath());
+                Path origPath = Path.of(track.getFilePath());
                 Path fn = origPath.getFileName();
                 if (fn != null) {
                     origFileName = fn.toString();
@@ -213,7 +212,8 @@ public class MissingTrackResolver {
      */
     public int calculateMatchScore(Track track, Path candidate, String origFileName, String origBaseName) {
         int score = 0;
-        String candFileName = candidate.getFileName() != null ? candidate.getFileName().toString() : "";
+        Path candFn = candidate.getFileName();
+        String candFileName = candFn != null ? candFn.toString() : "";
         String candBaseName = stripExtension(candFileName);
 
         // 1. Filename match
@@ -372,10 +372,6 @@ public class MissingTrackResolver {
 
     public void shutdown() {
         executorService.shutdown();
-    }
-
-    public void shutdownNow() {
-        executorService.shutdownNow();
     }
 
     private static String stripExtension(String fileName) {

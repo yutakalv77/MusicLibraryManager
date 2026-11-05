@@ -393,6 +393,7 @@ class I18nManagerTest {
         assertThat(jaProps.getProperty("table.menu.play")).isEqualTo("再生");
         assertThat(jaProps.getProperty("table.menu.play_next")).isEqualTo("次に再生");
         assertThat(jaProps.getProperty("table.menu.get_info")).isEqualTo("情報を表示");
+        assertThat(jaProps.getProperty("table.menu.open_folder")).isEqualTo("フォルダで開く");
         assertThat(jaProps.getProperty("table.menu.delete")).isEqualTo("ライブラリから削除");
 
         // Verify no replacement question marks in values

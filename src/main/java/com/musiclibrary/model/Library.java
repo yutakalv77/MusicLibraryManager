@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -16,6 +15,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Domain entity representing the entire music library.
  * Manages tracks and playlists using thread-safe collections with O(1) lookup indices.
  */
+@SuppressWarnings("this-escape")
 public class Library {
 
     private final Map<String, Track> tracks;
@@ -173,9 +173,10 @@ public class Library {
 
         // Cascade cleanup in all playlists (remove all occurrences if duplicates exist)
         for (Playlist playlist : playlists) {
-            while (playlist.removeTrack(trackId)) {
-                // Remove all duplicate occurrences of this track ID
-            }
+            boolean hasMore;
+            do {
+                hasMore = playlist.removeTrack(trackId);
+            } while (hasMore);
         }
 
         return removed;

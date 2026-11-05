@@ -13,7 +13,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import javax.swing.RowSorter;
 import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.Point;
@@ -97,7 +96,7 @@ class SettingsManagerTest {
         assertThat(reloaded.getVolumePercent()).isEqualTo(42);
 
         assertThat(reloaded.getColumns()).hasSize(3);
-        assertThat(reloaded.getColumns().get(0)).isEqualTo(new UserPreferences.ColumnConfig(1, 300, true));
+        assertThat(reloaded.getColumns().getFirst()).isEqualTo(new UserPreferences.ColumnConfig(1, 300, true));
         assertThat(reloaded.getSort().getModelIndex()).isEqualTo(2);
         assertThat(reloaded.getSort().getSortOrder()).isEqualTo("DESCENDING");
     }
@@ -437,9 +436,9 @@ class SettingsManagerTest {
         assertThat(cols).hasSize(15);
 
         // 2. Prepended Status column at index 0
-        assertThat(cols.get(0).getModelIndex()).isEqualTo(0);
-        assertThat(cols.get(0).getWidth()).isEqualTo(30);
-        assertThat(cols.get(0).isVisible()).isTrue();
+        assertThat(cols.getFirst().getModelIndex()).isEqualTo(0);
+        assertThat(cols.getFirst().getWidth()).isEqualTo(30);
+        assertThat(cols.getFirst().isVisible()).isTrue();
 
         // 3. Former legacy 0 (Track#) shifted to model index 1
         assertThat(cols.get(1).getModelIndex()).isEqualTo(1);
@@ -460,5 +459,40 @@ class SettingsManagerTest {
         assertThat(migratedPrefs.getSort().getModelIndex()).isEqualTo(2);
         assertThat(migratedPrefs.getSort().getSortOrder()).isEqualTo("ASCENDING");
     }
-}
 
+    @Test
+    @DisplayName("rightPaneWidth defaults to 400, clamps to >= 150, and roundtrips through save/load and MainFrame applyTo/saveFrom")
+    void testRightPaneWidthPersistenceAndMainFrameSync() {
+        Assumptions.assumeFalse(GraphicsEnvironment.isHeadless());
+
+        UserPreferences prefs = new UserPreferences();
+        assertThat(prefs.getRightPaneWidth()).isEqualTo(400);
+
+        // Minimum clamp check
+        prefs.setRightPaneWidth(50);
+        assertThat(prefs.getRightPaneWidth()).isEqualTo(150);
+
+        // Custom right pane width save & load roundtrip
+        prefs.setRightPaneWidth(520);
+        settingsManager.setPreferences(prefs);
+        settingsManager.save();
+
+        SettingsManager reloadedManager = new SettingsManager(settingsPath);
+        reloadedManager.load();
+        assertThat(reloadedManager.getPreferences().getRightPaneWidth()).isEqualTo(520);
+
+        // Apply to MainFrame and saveFrom roundtrip
+        MainFrame frame = new MainFrame(new Library(), null);
+        try {
+            reloadedManager.applyTo(frame);
+            assertThat(frame.getRightPaneWidth()).isEqualTo(520);
+
+            frame.setRightPaneWidth(460);
+            reloadedManager.saveFrom(frame);
+
+            assertThat(reloadedManager.getPreferences().getRightPaneWidth()).isEqualTo(460);
+        } finally {
+            frame.dispose();
+        }
+    }
+}

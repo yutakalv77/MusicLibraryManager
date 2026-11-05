@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 class TrackTablePanelTest {
 
@@ -221,11 +222,13 @@ class TrackTablePanelTest {
         AtomicReference<Track> playedTrack = new AtomicReference<>();
         AtomicReference<Track> playedNextTrack = new AtomicReference<>();
         AtomicReference<Track> infoTrack = new AtomicReference<>();
+        AtomicReference<Track> folderTrack = new AtomicReference<>();
         AtomicReference<Track> deletedTrack = new AtomicReference<>();
 
         panel.setOnPlayAction(playedTrack::set);
         panel.setOnPlayNextAction(playedNextTrack::set);
         panel.setOnGetInfoAction(infoTrack::set);
+        panel.setOnOpenFolderAction(folderTrack::set);
         panel.setOnDeleteAction(deletedTrack::set);
 
         // 1. Play
@@ -240,7 +243,11 @@ class TrackTablePanelTest {
         panel.getGetInfoMenuItem().doClick();
         assertThat(infoTrack.get()).isEqualTo(t1);
 
-        // 4. Delete
+        // 4. Open Folder
+        panel.getOpenFolderMenuItem().doClick();
+        assertThat(folderTrack.get()).isEqualTo(t1);
+
+        // 5. Delete
         panel.getDeleteMenuItem().doClick();
         assertThat(deletedTrack.get()).isEqualTo(t1);
     }
@@ -637,6 +644,99 @@ class TrackTablePanelTest {
         I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
         panel.updateLanguage();
         assertThat(panel.getEditTagsMenuItem().getText()).isEqualTo("タグを編集...");
+    }
+
+    @Test
+    @DisplayName("Open folder menu item triggers onOpenFolderAction and reflects language changes")
+    void testOpenFolderContextMenu() {
+        TrackTablePanel panel = new TrackTablePanel();
+        Track t1 = Track.builder().id("1").title("Track 1").filePath("C:/music/1.mp3").build();
+        panel.setTracks(List.of(t1));
+        panel.getTable().setRowSelectionInterval(0, 0);
+
+        AtomicReference<Track> openedRef = new AtomicReference<>();
+        panel.setOnOpenFolderAction(openedRef::set);
+
+        // Verify English text
+        I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        panel.updateLanguage();
+        assertThat(panel.getOpenFolderMenuItem().getText()).isEqualTo("Open in Folder");
+
+        // Trigger via menu item
+        panel.getOpenFolderMenuItem().doClick();
+        assertThat(openedRef.get()).isEqualTo(t1);
+
+        // Trigger via triggerOpenFolderAction method
+        openedRef.set(null);
+        panel.triggerOpenFolderAction();
+        assertThat(openedRef.get()).isEqualTo(t1);
+
+        // Verify Japanese text
+        I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+        panel.updateLanguage();
+        assertThat(panel.getOpenFolderMenuItem().getText()).isEqualTo("フォルダで開く");
+
+        // Verify openContainingFolder safely handles null or empty track
+        panel.openContainingFolder(null);
+        panel.openContainingFolder(new Track());
+    }
+
+    @Test
+    @DisplayName("Open folder menu item is placed correctly in context menu and handles selection edge cases")
+    void testOpenFolderContextMenuStructureAndSelection() {
+        TrackTablePanel panel = new TrackTablePanel();
+        // Index 4 is editTagsMenuItem, Index 5 is openFolderMenuItem, Index 6 is separator, Index 7 is deleteMenuItem
+        assertThat(panel.getContextMenu().getComponent(5)).isSameAs(panel.getOpenFolderMenuItem());
+        assertThat(panel.getContextMenu().getComponent(4)).isSameAs(panel.getEditTagsMenuItem());
+        assertThat(panel.getContextMenu().getComponent(6)).isInstanceOf(javax.swing.JSeparator.class);
+        assertThat(panel.getContextMenu().getComponent(7)).isSameAs(panel.getDeleteMenuItem());
+
+        // When no track is selected, callback should not be invoked
+        AtomicReference<Track> openedRef = new AtomicReference<>();
+        panel.setOnOpenFolderAction(openedRef::set);
+        panel.getTable().clearSelection();
+        panel.getOpenFolderMenuItem().doClick();
+        assertThat(openedRef.get()).isNull();
+        panel.triggerOpenFolderAction();
+        assertThat(openedRef.get()).isNull();
+
+        // When onOpenFolderAction is null and track is selected, triggerOpenFolderAction executes default without exception
+        panel.setOnOpenFolderAction(null);
+        Track dummy = Track.builder().id("dummy").title("Dummy").filePath("non_existent_folder_abc/dummy.mp3").build();
+        panel.setTracks(List.of(dummy));
+        panel.getTable().setRowSelectionInterval(0, 0);
+        assertThatCode(() -> panel.triggerOpenFolderAction()).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("openContainingFolder handles boundary values and non-existent paths safely and asynchronously")
+    void testOpenContainingFolderBoundaries() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        // Null track
+        assertThatCode(() -> panel.openContainingFolder(null)).doesNotThrowAnyException();
+
+        // Empty track (null filePath)
+        assertThatCode(() -> panel.openContainingFolder(new Track())).doesNotThrowAnyException();
+
+        // Track with blank filePath
+        Track trackWithBlankPath = new Track() {
+            @Override
+            public String getFilePath() {
+                return "   ";
+            }
+        };
+        assertThatCode(() -> panel.openContainingFolder(trackWithBlankPath)).doesNotThrowAnyException();
+
+        // Relative path with no parent directory (new File("song.mp3").getParentFile() == null)
+        assertThatCode(() -> panel.openContainingFolder(Track.builder().filePath("song.mp3").build())).doesNotThrowAnyException();
+
+        // Non-existent directory
+        assertThatCode(() -> panel.openContainingFolder(Track.builder().filePath("C:/non_existent_dir_98765/song.mp3").build())).doesNotThrowAnyException();
+        assertThatCode(() -> panel.openContainingFolder(Track.builder().filePath("C:/non_existent_dir_98765/").build())).doesNotThrowAnyException();
+
+        // Unix style non-existent path
+        assertThatCode(() -> panel.openContainingFolder(Track.builder().filePath("/non/existent/path/test.mp3").build())).doesNotThrowAnyException();
     }
 
     @Test
@@ -1531,5 +1631,141 @@ class TrackTablePanelTest {
         assertThat(enItem).isNotNull();
         assertThat(enItem.getText()).isEqualTo("#");
     }
-}
 
+    @Test
+    @DisplayName("Compact 2-line mode hides header, uses 1 column with 50px row height, renders 2-line track info, and restores normal mode cleanly")
+    void testCompactTwoLineModeAndRenderer() {
+        TrackTablePanel panel = new TrackTablePanel();
+
+        Track t1 = Track.builder()
+                .id("1")
+                .trackNumber(1)
+                .title("Bohemian Rhapsody")
+                .artist("Queen")
+                .album("A Night at the Opera")
+                .durationSeconds(354)
+                .rating(5)
+                .filePath("1.mp3")
+                .build();
+        Track t2 = Track.builder()
+                .id("2")
+                .trackNumber(0)
+                .title("Love of My Life")
+                .artist("Queen")
+                .album("A Night at the Opera")
+                .durationSeconds(219)
+                .rating(0)
+                .filePath("2.mp3")
+                .build();
+        panel.setTracks(List.of(t1, t2));
+
+        // Save custom sort and column state before entering compact mode
+        var initialColumnConfigs = panel.exportColumnConfigs();
+        panel.applySortConfig(new com.musiclibrary.settings.UserPreferences.SortConfig(
+                com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TITLE, "ASCENDING"));
+
+        // 1. Enable compact 2-line mode
+        panel.setCompactTwoLineMode(true);
+        assertThat(panel.isCompactTwoLineMode()).isTrue();
+        assertThat(panel.getTable().getColumnCount()).isEqualTo(1);
+        assertThat(panel.getTable().getRowHeight()).isEqualTo(TrackTablePanel.COMPACT_ROW_HEIGHT);
+        assertThat(panel.getTable().getTableHeader().isVisible()).isFalse();
+        assertThat(panel.getScrollPane().getColumnHeader() == null
+                || panel.getScrollPane().getColumnHeader().getView() == null).isTrue();
+
+        // 2. Verify TwoLineTrackCellRenderer renders Line 1 (Track#, Title, Duration) and Line 2 (Artist, Rating)
+        TrackTablePanel.TwoLineTrackCellRenderer renderer = panel.getTwoLineRenderer();
+        assertThat(renderer).isNotNull();
+
+        // Row 0 (trackNumber=1, rating=5, unselected)
+        panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        assertThat(renderer.getTrackNumberLabel().getText()).isEqualTo("1");
+        assertThat(renderer.getTitleLabel().getText()).isEqualTo("Bohemian Rhapsody");
+        assertThat(renderer.getDurationLabel().getText()).isEqualTo("05:54");
+        assertThat(renderer.getArtistLabel().getText()).isEqualTo("Queen");
+        assertThat(renderer.getRatingLabel().getText()).isEqualTo("★★★★★");
+
+        // Row 1 (trackNumber=0 -> "-", rating=0 -> "—", selected)
+        panel.getTable().getCellRenderer(1, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 0), true, true, 1, 0);
+        assertThat(renderer.getTrackNumberLabel().getText()).isEqualTo("-");
+        assertThat(renderer.getTitleLabel().getText()).isEqualTo("Love of My Life");
+        assertThat(renderer.getDurationLabel().getText()).isEqualTo("03:39");
+        assertThat(renderer.getArtistLabel().getText()).isEqualTo("Queen");
+        assertThat(renderer.getRatingLabel().getText()).isEqualTo("—");
+
+        // 3. Verify playback status icon in TwoLineTrackCellRenderer (PLAYING, PAUSED, STOPPED)
+        assertThat(renderer.getStatusLabel().getIcon()).isNull();
+
+        // PLAYING on track 1
+        panel.setPlaybackStatus("1", com.musiclibrary.model.PlaybackState.PLAYING);
+        panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        assertThat(renderer.getStatusLabel().getIcon()).isNotNull();
+        assertThat(renderer.getStatusLabel().getToolTipText()).isEqualTo("Playing");
+        // Track number remains intact ("1")
+        assertThat(renderer.getTrackNumberLabel().getText()).isEqualTo("1");
+
+        // Row 1 (track 2) is not playing -> icon is null
+        panel.getTable().getCellRenderer(1, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 0), false, false, 1, 0);
+        assertThat(renderer.getStatusLabel().getIcon()).isNull();
+        assertThat(renderer.getStatusLabel().getToolTipText()).isNull();
+
+        // PAUSED on track 2
+        panel.setPlaybackStatus("2", com.musiclibrary.model.PlaybackState.PAUSED);
+        panel.getTable().getCellRenderer(1, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 0), false, false, 1, 0);
+        assertThat(renderer.getStatusLabel().getIcon()).isNotNull();
+        assertThat(renderer.getStatusLabel().getToolTipText()).isEqualTo("Paused");
+        assertThat(renderer.getTrackNumberLabel().getText()).isEqualTo("-");
+
+        // STOPPED -> icon cleared
+        panel.setPlaybackStatus(null, com.musiclibrary.model.PlaybackState.STOPPED);
+        panel.getTable().getCellRenderer(1, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(1, 0), false, false, 1, 0);
+        assertThat(renderer.getStatusLabel().getIcon()).isNull();
+        assertThat(renderer.getStatusLabel().getToolTipText()).isNull();
+
+        // 4. Verify missing track warning ("⚠️ ", red foreground when unselected, tooltip) in TwoLineTrackCellRenderer
+        t1.setMissing(true);
+        panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        assertThat(renderer.getTitleLabel().getText()).isEqualTo("⚠️ Bohemian Rhapsody");
+        assertThat(renderer.getTitleLabel().getForeground()).isEqualTo(new java.awt.Color(220, 80, 80));
+        assertThat(renderer.getTitleLabel().getToolTipText()).isNotBlank();
+        assertThat(renderer.getToolTipText()).isNotBlank();
+
+        // When selected, missing track uses selection foreground
+        panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), true, true, 0, 0);
+        assertThat(renderer.getTitleLabel().getText()).isEqualTo("⚠️ Bohemian Rhapsody");
+        assertThat(renderer.getTitleLabel().getForeground()).isEqualTo(panel.getTable().getSelectionForeground());
+
+        // Restore missing=false -> normal title, foreground, and null tooltip
+        t1.setMissing(false);
+        panel.getTable().getCellRenderer(0, 0)
+                .getTableCellRendererComponent(panel.getTable(), panel.getTable().getValueAt(0, 0), false, false, 0, 0);
+        assertThat(renderer.getTitleLabel().getText()).isEqualTo("Bohemian Rhapsody");
+        assertThat(renderer.getTitleLabel().getForeground()).isEqualTo(panel.getTable().getForeground());
+        assertThat(renderer.getTitleLabel().getToolTipText()).isNull();
+        assertThat(renderer.getToolTipText()).isNull();
+
+        // 5. Exporting column & sort configs while in compact mode returns preserved normal configs
+        assertThat(panel.exportColumnConfigs()).hasSameSizeAs(initialColumnConfigs);
+        assertThat(panel.exportSortConfig().getModelIndex())
+                .isEqualTo(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TITLE);
+        assertThat(panel.exportSortConfig().getSortOrder()).isEqualTo("ASCENDING");
+
+        // 4. Disable compact 2-line mode -> restores multi-column table, row height 26, header visibility, and sort
+        panel.setCompactTwoLineMode(false);
+        assertThat(panel.isCompactTwoLineMode()).isFalse();
+        assertThat(panel.getTable().getColumnCount()).isEqualTo(9);
+        assertThat(panel.getTable().getRowHeight()).isEqualTo(TrackTablePanel.DEFAULT_ROW_HEIGHT);
+        assertThat(panel.getTable().getTableHeader().isVisible()).isTrue();
+        assertThat(panel.getScrollPane().getColumnHeader().getView()).isSameAs(panel.getTable().getTableHeader());
+        assertThat(panel.exportSortConfig().getModelIndex())
+                .isEqualTo(com.musiclibrary.ui.table.TrackTableModel.COLUMN_INDEX_TITLE);
+    }
+}

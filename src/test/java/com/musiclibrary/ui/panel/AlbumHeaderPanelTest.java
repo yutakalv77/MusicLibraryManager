@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import java.awt.BorderLayout;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -28,7 +27,7 @@ class AlbumHeaderPanelTest {
 
         Track t1 = Track.builder().id("1").filePath("tracks/1.mp3").title("Song 1").artist("Queen").album("A Night at the Opera").year(1975).durationSeconds(354).build();
         Track t2 = Track.builder().id("2").filePath("tracks/2.mp3").title("Song 2").artist("Queen").album("A Night at the Opera").year(1975).durationSeconds(219).build();
-        sampleAlbum = Album.fromTracks(List.of(t1, t2)).get(0);
+        sampleAlbum = Album.fromTracks(List.of(t1, t2)).getFirst();
 
         headerPanel = new AlbumHeaderPanel();
     }
@@ -77,13 +76,16 @@ class AlbumHeaderPanelTest {
     }
 
     @Test
-    @DisplayName("Clicking back button invokes onBackAction callback")
-    void testBackButtonAction() {
+    @DisplayName("Top back-button bar is hidden in 2-pane split layout while backButton callback remains functional")
+    void testBackButtonHiddenAndActionFunctional() {
         AtomicBoolean backClicked = new AtomicBoolean(false);
         headerPanel.setOnBackAction(() -> backClicked.set(true));
 
         JPanel topBar = (JPanel) headerPanel.getComponent(0);
         JButton backButton = (JButton) topBar.getComponent(0);
+
+        assertThat(topBar.isVisible()).isFalse();
+        assertThat(headerPanel.getBackButton()).isSameAs(backButton);
 
         backButton.doClick();
 
@@ -117,5 +119,44 @@ class AlbumHeaderPanelTest {
 
         assertThat(backButton.getText()).contains("Back to Albums");
         assertThat(metaLabel.getText()).contains("songs");
+    }
+
+    @Test
+    @DisplayName("setArtist populates header with artist name, album count, track count, and duration, and clears album")
+    void testSetArtistAndLanguageUpdate() {
+        Track t1 = Track.builder().id("1").filePath("1.mp3").title("Song 1").artist("Queen").album("Album A").durationSeconds(354).build();
+        Track t2 = Track.builder().id("2").filePath("2.mp3").title("Song 2").artist("Queen").album("Album B").durationSeconds(219).build();
+        com.musiclibrary.model.Artist artist = com.musiclibrary.model.Artist.fromTracks(List.of(t1, t2)).getFirst();
+
+        headerPanel.setAlbum(sampleAlbum);
+        assertThat(headerPanel.getAlbum()).isEqualTo(sampleAlbum);
+
+        headerPanel.setArtist(artist);
+        assertThat(headerPanel.getArtist()).isEqualTo(artist);
+        assertThat(headerPanel.getAlbum()).isNull();
+
+        assertThat(headerPanel.getTitleLabel().getText()).isEqualTo("Queen");
+        assertThat(headerPanel.getArtistLabel().getText()).isEqualTo("2 albums");
+        assertThat(headerPanel.getMetaLabel().getText())
+                .contains("2 songs")
+                .contains("9:33");
+
+        // Switch to Japanese
+        I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+        headerPanel.updateLanguage();
+        assertThat(headerPanel.getArtistLabel().getText()).contains("アルバム");
+        assertThat(headerPanel.getMetaLabel().getText()).contains("曲");
+
+        // Switch back to English
+        I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        headerPanel.updateLanguage();
+        assertThat(headerPanel.getArtistLabel().getText()).isEqualTo("2 albums");
+
+        // setArtist(null) clears labels safely
+        headerPanel.setArtist(null);
+        assertThat(headerPanel.getArtist()).isNull();
+        assertThat(headerPanel.getTitleLabel().getText()).isEmpty();
+        assertThat(headerPanel.getArtistLabel().getText()).isEmpty();
+        assertThat(headerPanel.getMetaLabel().getText()).isEmpty();
     }
 }

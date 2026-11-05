@@ -190,7 +190,8 @@ public class JsonToSqliteMigrator {
 
     private static Path resolveBackupPath(Path jsonPath) {
         Path dir = jsonPath.getParent();
-        String filename = jsonPath.getFileName().toString();
+        Path fn = jsonPath.getFileName();
+        String filename = fn != null ? fn.toString() : "library.json";
         Path defaultBak = (dir != null) ? dir.resolve(filename + ".bak") : Path.of(filename + ".bak");
         if (!Files.exists(defaultBak)) {
             return defaultBak;

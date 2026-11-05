@@ -13,7 +13,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
@@ -22,8 +21,10 @@ import java.util.function.Consumer;
  * Operates purely on background worker threads without blocking the Swing EDT,
  * dispatches all listener events to the EDT, and supports real-time hardware/software volume adjustment.
  */
+@SuppressWarnings("this-escape")
 public class BasicAudioPlayer implements AudioPlayer {
 
+    private static final System.Logger LOGGER = System.getLogger(BasicAudioPlayer.class.getName());
     private static final float DEFAULT_VOLUME = 0.7f;
     private static final long PROGRESS_NOTIFICATION_INTERVAL_MS = 250L;
 
@@ -346,21 +347,27 @@ public class BasicAudioPlayer implements AudioPlayer {
         if (activeJlayerPlayer != null) {
             try {
                 activeJlayerPlayer.close();
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.DEBUG, "Failed to close JLayer player", e);
+            }
             activeJlayerPlayer = null;
         }
 
         if (activeAudioDevice != null) {
             try {
                 activeAudioDevice.close();
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.DEBUG, "Failed to close audio device", e);
+            }
             activeAudioDevice = null;
         }
 
         if (activeInputStream != null) {
             try {
                 activeInputStream.close();
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.DEBUG, "Failed to close input stream", e);
+            }
             activeInputStream = null;
         }
     }

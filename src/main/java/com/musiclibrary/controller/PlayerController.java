@@ -20,6 +20,7 @@ import java.util.function.Consumer;
  * Controller mediating audio playback operations between AudioPlayer,
  * PlayQueue, ControlBarPanel UI components, and table selection actions.
  */
+@SuppressWarnings("this-escape")
 public class PlayerController implements AutoCloseable {
 
     private static final long DEFAULT_SKIP_SECONDS = 5L;
@@ -480,16 +481,8 @@ public class PlayerController implements AutoCloseable {
         this.onNextAction = onNextAction;
     }
 
-    public Runnable getOnNextAction() {
-        return onNextAction;
-    }
-
     public void setOnPreviousAction(Runnable onPreviousAction) {
         this.onPreviousAction = onPreviousAction;
-    }
-
-    public Runnable getOnPreviousAction() {
-        return onPreviousAction;
     }
 
     public void setErrorHandler(Consumer<Throwable> errorHandler) {

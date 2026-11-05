@@ -2,6 +2,7 @@ package com.musiclibrary.ui.panel;
 
 import com.musiclibrary.i18n.I18nManager;
 import com.musiclibrary.model.Album;
+import com.musiclibrary.model.Artist;
 import com.musiclibrary.model.Track;
 import com.musiclibrary.service.cache.ArtworkCache;
 import com.musiclibrary.util.TimeFormatter;
@@ -26,6 +27,7 @@ import java.util.Objects;
  * Top header panel displayed in album detail view, providing a "Back to albums" navigation button,
  * representative artwork thumbnail, album title, artist, track count, and total duration.
  */
+@SuppressWarnings({"this-escape"})
 public class AlbumHeaderPanel extends JPanel {
 
     private static final int THUMBNAIL_SIZE = 80;
@@ -37,10 +39,12 @@ public class AlbumHeaderPanel extends JPanel {
     private final JLabel metaLabel;
 
     private Album currentAlbum;
+    private Artist currentArtist;
     private Runnable onBackAction;
 
     public AlbumHeaderPanel() {
-        setLayout(new BorderLayout(16, 8));
+        setLayout(new BorderLayout(16, 0));
+        setMinimumSize(new Dimension(150, 0));
         setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, UIManager.getColor("Component.borderColor") != null
                         ? UIManager.getColor("Component.borderColor")
@@ -48,7 +52,7 @@ public class AlbumHeaderPanel extends JPanel {
                 BorderFactory.createEmptyBorder(12, 16, 12, 16)
         ));
 
-        // 1. Navigation Back Button
+        // 1. Navigation Back Button (retained for API compatibility; hidden in 2-pane split layout)
         backButton = new JButton();
         updateBackButtonText();
         backButton.setFocusPainted(false);
@@ -61,6 +65,7 @@ public class AlbumHeaderPanel extends JPanel {
         JPanel topBar = new JPanel(new BorderLayout());
         topBar.setOpaque(false);
         topBar.add(backButton, BorderLayout.WEST);
+        topBar.setVisible(false);
         add(topBar, BorderLayout.NORTH);
 
         // 2. Center Content (Thumbnail + Details)
@@ -107,6 +112,7 @@ public class AlbumHeaderPanel extends JPanel {
      */
     public void setAlbum(Album album) {
         this.currentAlbum = album;
+        this.currentArtist = null;
         if (album == null) {
             titleLabel.setText("");
             artistLabel.setText("");
@@ -124,8 +130,50 @@ public class AlbumHeaderPanel extends JPanel {
         loadArtworkAsync(album);
     }
 
+    /**
+     * Sets the artist to be displayed in the header.
+     *
+     * @param artist artist instance
+     */
+    public void setArtist(Artist artist) {
+        this.currentAlbum = null;
+        this.currentArtist = artist;
+        if (artist == null) {
+            titleLabel.setText("");
+            artistLabel.setText("");
+            metaLabel.setText("");
+            artworkLabel.setIcon(new ImageIcon(ArtworkCache.getInstance().getDefaultImage(THUMBNAIL_SIZE, THUMBNAIL_SIZE)));
+            return;
+        }
+
+        titleLabel.setText(artist.getName());
+        titleLabel.setToolTipText(artist.getName());
+        String albumCountText = formatArtistAlbumCountText(artist);
+        artistLabel.setText(albumCountText);
+        artistLabel.setToolTipText(albumCountText);
+        metaLabel.setText(formatArtistMetaText(artist));
+
+        loadArtistArtworkAsync(artist);
+    }
+
     public Album getAlbum() {
         return currentAlbum;
+    }
+
+    public Artist getArtist() {
+        return currentArtist;
+    }
+
+    public JLabel getTitleLabel() {
+        return titleLabel;
+    }
+
+    public JLabel getArtistLabel() {
+        return artistLabel;
+    }
+
+    public JLabel getMetaLabel() {
+        return metaLabel;
     }
 
     public void setOnBackAction(Runnable onBackAction) {
@@ -140,6 +188,11 @@ public class AlbumHeaderPanel extends JPanel {
         updateBackButtonText();
         if (currentAlbum != null) {
             metaLabel.setText(formatMetaText());
+        } else if (currentArtist != null) {
+            String albumCountText = formatArtistAlbumCountText(currentArtist);
+            artistLabel.setText(albumCountText);
+            artistLabel.setToolTipText(albumCountText);
+            metaLabel.setText(formatArtistMetaText(currentArtist));
         }
     }
 
@@ -169,6 +222,36 @@ public class AlbumHeaderPanel extends JPanel {
         return sb.toString();
     }
 
+    private String formatArtistAlbumCountText(Artist artist) {
+        if (artist == null) {
+            return "";
+        }
+        I18nManager i18n = I18nManager.getInstance();
+        if (artist.getAlbumCount() == 1) {
+            String single = i18n.get("artist.album_count_single");
+            if (single != null && !single.startsWith("!")) {
+                return single;
+            }
+        }
+        String formatted = i18n.format("artist.album_count", artist.getAlbumCount());
+        if (formatted == null || formatted.startsWith("!")) {
+            return artist.getAlbumCount() + " albums";
+        }
+        return formatted;
+    }
+
+    private String formatArtistMetaText(Artist artist) {
+        if (artist == null) {
+            return "";
+        }
+        I18nManager i18n = I18nManager.getInstance();
+        String countText = (artist.getTrackCount() == 1 && i18n.get("album.track_count_single") != null && !i18n.get("album.track_count_single").startsWith("!"))
+                ? i18n.get("album.track_count_single")
+                : i18n.format("album.track_count", artist.getTrackCount());
+        String durationText = TimeFormatter.format(artist.getTotalDurationSeconds());
+        return countText + " \u2022 " + durationText;
+    }
+
     private void loadArtworkAsync(Album album) {
         artworkLabel.setIcon(new ImageIcon(ArtworkCache.getInstance().getDefaultImage(THUMBNAIL_SIZE, THUMBNAIL_SIZE)));
         Track rep = album.getRepresentativeTrack();
@@ -187,6 +270,35 @@ public class AlbumHeaderPanel extends JPanel {
                 try {
                     // Check if currentAlbum hasn't changed during async loading
                     if (Objects.equals(currentAlbum, album)) {
+                        Image img = get();
+                        if (img != null) {
+                            artworkLabel.setIcon(new ImageIcon(img));
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    private void loadArtistArtworkAsync(Artist artist) {
+        artworkLabel.setIcon(new ImageIcon(ArtworkCache.getInstance().getDefaultImage(THUMBNAIL_SIZE, THUMBNAIL_SIZE)));
+        Track rep = artist.getRepresentativeTrack();
+        if (rep == null || !rep.hasArtwork()) {
+            return;
+        }
+
+        SwingWorker<Image, Void> worker = new SwingWorker<>() {
+            @Override
+            protected Image doInBackground() {
+                return ArtworkCache.getInstance().getImage(rep, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    if (Objects.equals(currentArtist, artist)) {
                         Image img = get();
                         if (img != null) {
                             artworkLabel.setIcon(new ImageIcon(img));

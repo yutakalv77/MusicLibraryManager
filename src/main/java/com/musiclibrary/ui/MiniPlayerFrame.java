@@ -27,7 +27,6 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import static com.musiclibrary.util.SwingUtils.runOnEdt;
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -44,6 +43,7 @@ import java.util.Objects;
  * Compact, desktop-resident mini player window coordinating seamlessly
  * with the shared {@link PlayerController} and uninterrupted audio playback.
  */
+@SuppressWarnings({"this-escape"})
 public class MiniPlayerFrame extends JFrame {
 
     private final PlayerController playerController;

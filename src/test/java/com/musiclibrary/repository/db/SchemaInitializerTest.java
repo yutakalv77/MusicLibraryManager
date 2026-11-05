@@ -230,13 +230,11 @@ class SchemaInitializerTest {
                 .hasMessageContaining("connection");
 
         // 2. closed connection
-        try (DatabaseManager dbManager = new DatabaseManager(":memory:")) {
-            Connection conn = dbManager.getConnection();
-            dbManager.close(); // Underlying or proxy closed
-
-            assertThatThrownBy(() -> SchemaInitializer.initialize(dbManager))
-                    .isInstanceOf(SQLException.class);
-        }
+        DatabaseManager dbManager2 = new DatabaseManager(":memory:");
+        dbManager2.getConnection();
+        dbManager2.close(); // Underlying or proxy closed
+        assertThatThrownBy(() -> SchemaInitializer.initialize(dbManager2))
+                .isInstanceOf(SQLException.class);
 
         // 3. invalid SQL execution throws SQLException
         try (DatabaseManager dbManager = new DatabaseManager(":memory:");

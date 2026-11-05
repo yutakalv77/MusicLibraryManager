@@ -32,6 +32,7 @@ import java.util.function.Consumer;
 /**
  * Modal dialog for managing and switching user accounts/profiles.
  */
+@SuppressWarnings({"this-escape"})
 public class AccountManagerDialog extends JDialog {
 
     private final AccountRepository accountRepository;

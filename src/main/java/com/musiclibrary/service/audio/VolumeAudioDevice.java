@@ -18,10 +18,12 @@ import javax.sound.sampled.SourceDataLine;
  */
 public class VolumeAudioDevice extends AudioDeviceBase {
 
+    private static final System.Logger LOGGER = System.getLogger(VolumeAudioDevice.class.getName());
+
     private SourceDataLine source;
     private AudioFormat fmt;
     private byte[] byteBuf = new byte[4096];
-    private float volume = 1.0f; // 0.0f - 1.0f
+    private float volume; // 0.0f - 1.0f
     private boolean hardwareGainSupported = false;
 
     public VolumeAudioDevice() {
@@ -56,11 +58,11 @@ public class VolumeAudioDevice extends AudioDeviceBase {
     }
 
     @Override
-    protected void openImpl() throws JavaLayerException {
+    protected void openImpl() {
         // Line initialized on first writeImpl
     }
 
-    protected void createSource() throws JavaLayerException {
+    protected void createSource() {
         try {
             if (fmt == null) {
                 Decoder decoder = getDecoder();
@@ -150,10 +152,14 @@ public class VolumeAudioDevice extends AudioDeviceBase {
             try {
                 source.stop();
                 source.flush();
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.DEBUG, "Failed to stop/flush source data line", e);
+            }
             try {
                 source.close();
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.DEBUG, "Failed to close source data line", e);
+            }
             source = null;
         }
     }
@@ -163,7 +169,9 @@ public class VolumeAudioDevice extends AudioDeviceBase {
         if (source != null) {
             try {
                 source.drain();
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.DEBUG, "Failed to drain source data line", e);
+            }
         }
     }
 

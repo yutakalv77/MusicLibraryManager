@@ -22,6 +22,7 @@ import java.util.Locale;
  * Non-modal progress dialog shown during audio file scanning and import.
  * Features real-time progress bar, current file label, ETA/speed indicator, "Run in Background", and "Cancel".
  */
+@SuppressWarnings({"this-escape"})
 public class ImportProgressDialog extends JDialog {
 
     private final JLabel titleLabel;
@@ -264,10 +265,6 @@ public class ImportProgressDialog extends JDialog {
 
     public JLabel getMetricsLabel() {
         return metricsLabel;
-    }
-
-    public void resetStartTime() {
-        this.startTimeMs = System.currentTimeMillis();
     }
 
     public void setStartTimeMs(long startTimeMs) {

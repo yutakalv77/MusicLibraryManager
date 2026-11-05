@@ -1,8 +1,6 @@
 package com.musiclibrary.service.storage;
 
 import com.musiclibrary.model.Track;
-import com.musiclibrary.service.importer.FileScanner;
-import com.musiclibrary.service.metadata.MetadataExtractor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,7 +17,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 

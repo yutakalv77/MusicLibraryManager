@@ -12,7 +12,6 @@ import java.awt.Point;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.dnd.DnDConstants;
-import java.awt.dnd.DropTargetContext;
 import java.awt.dnd.DropTargetDragEvent;
 import java.awt.dnd.DropTargetDropEvent;
 import java.io.File;
@@ -618,4 +617,3 @@ class TrackDropTargetListenerTest {
         assertThat(callbackCalled.get()).isFalse();
     }
 }
-

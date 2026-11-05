@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Random;
 
 /**
@@ -162,7 +161,7 @@ public class PlayQueue {
                 activeTrack = playbackOrder.get(currentIndex);
             } else {
                 currentIndex = 0;
-                activeTrack = playbackOrder.get(0);
+                activeTrack = playbackOrder.getFirst();
             }
             return activeTrack;
         }
@@ -177,7 +176,7 @@ public class PlayQueue {
         // 4. End reached: loop if RepeatMode.ALL
         if (repeatMode == RepeatMode.ALL) {
             currentIndex = 0;
-            activeTrack = playbackOrder.get(0);
+            activeTrack = playbackOrder.getFirst();
             return activeTrack;
         }
 
@@ -224,7 +223,7 @@ public class PlayQueue {
             return activeTrack;
         }
 
-        activeTrack = playbackOrder.get(0);
+        activeTrack = playbackOrder.getFirst();
         return activeTrack;
     }
 

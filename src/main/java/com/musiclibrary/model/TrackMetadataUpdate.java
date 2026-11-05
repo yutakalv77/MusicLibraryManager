@@ -1,7 +1,5 @@
 package com.musiclibrary.model;
 
-import java.util.Arrays;
-import java.util.Objects;
 
 /**
  * Data transfer object encapsulating partial or full updates to a track's ID3 metadata.

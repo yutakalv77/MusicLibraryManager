@@ -257,4 +257,3 @@ class SidebarPanelTest {
         assertThat(actionInvoked.get()).isTrue();
     }
 }
-

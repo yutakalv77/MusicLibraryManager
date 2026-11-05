@@ -33,6 +33,7 @@ import java.util.function.Consumer;
  * Interactive card displaying an album's artwork (async loaded), title, artist,
  * and track metadata with hover effects and selection callbacks.
  */
+@SuppressWarnings({"this-escape"})
 public class AlbumCardPanel extends JPanel {
 
     public static final int CARD_WIDTH = 152;
@@ -52,6 +53,7 @@ public class AlbumCardPanel extends JPanel {
     private final JLabel metaLabel;
 
     private boolean isHovered = false;
+    private boolean selected = false;
     private Consumer<Album> onAlbumSelected;
     private volatile boolean disposed = false;
 
@@ -132,15 +134,11 @@ public class AlbumCardPanel extends JPanel {
     }
 
     private String formatMetaText() {
-        String countPattern = (album.getTrackCount() == 1)
-                ? I18nManager.getInstance().get("album.track_count_single")
-                : I18nManager.getInstance().get("album.track_count");
-        if (countPattern == null || countPattern.isBlank()) {
-            countPattern = "{0} tracks";
-        }
-        String trackCountText = I18nManager.getInstance().format("album.track_count", album.getTrackCount());
+        String trackCountText;
         if (album.getTrackCount() == 1 && I18nManager.getInstance().get("album.track_count_single") != null) {
             trackCountText = I18nManager.getInstance().get("album.track_count_single");
+        } else {
+            trackCountText = I18nManager.getInstance().format("album.track_count", album.getTrackCount());
         }
 
         if (album.getYear() > 0) {
@@ -197,6 +195,17 @@ public class AlbumCardPanel extends JPanel {
         this.onAlbumSelected = onAlbumSelected;
     }
 
+    public void setSelected(boolean selected) {
+        if (this.selected != selected) {
+            this.selected = selected;
+            repaint();
+        }
+    }
+
+    public boolean isSelected() {
+        return selected;
+    }
+
     public void updateLanguage() {
         metaLabel.setText(formatMetaText());
         repaint();
@@ -204,16 +213,22 @@ public class AlbumCardPanel extends JPanel {
 
     @Override
     protected void paintComponent(Graphics g) {
-        if (isHovered) {
+        if (selected || isHovered) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            Color hoverBg = UIManager.getColor("List.selectionBackground");
-            if (hoverBg != null) {
-                g2.setColor(new Color(hoverBg.getRed(), hoverBg.getGreen(), hoverBg.getBlue(), 35));
-            } else {
-                g2.setColor(new Color(128, 128, 128, 35));
+            Color baseBg = UIManager.getColor("List.selectionBackground");
+            if (baseBg == null) {
+                baseBg = new Color(60, 120, 216);
             }
-            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
+            if (selected) {
+                g2.setColor(new Color(baseBg.getRed(), baseBg.getGreen(), baseBg.getBlue(), 75));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
+                g2.setColor(new Color(baseBg.getRed(), baseBg.getGreen(), baseBg.getBlue(), 190));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 10, 10);
+            } else {
+                g2.setColor(new Color(baseBg.getRed(), baseBg.getGreen(), baseBg.getBlue(), 35));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
+            }
             g2.dispose();
         }
         super.paintComponent(g);

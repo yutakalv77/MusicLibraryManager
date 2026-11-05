@@ -60,10 +60,6 @@ public class SettingsManager {
         return Paths.get(System.getProperty("user.home"), ".musiclibrary", "settings.json");
     }
 
-    public Path getSettingsPath() {
-        return settingsPath;
-    }
-
     public UserPreferences getPreferences() {
         synchronized (lock) {
             return preferences;
@@ -215,6 +211,9 @@ public class SettingsManager {
             frame.getTrackTablePanel().applyColumnConfigs(prefs.getColumns());
             frame.getTrackTablePanel().applySortConfig(prefs.getSort());
         }
+
+        // 4. Split Pane Right Pane Width
+        frame.setRightPaneWidth(prefs.getRightPaneWidth());
     }
 
     /**
@@ -257,6 +256,9 @@ public class SettingsManager {
                 preferences.setColumns(frame.getTrackTablePanel().exportColumnConfigs());
                 preferences.setSort(frame.getTrackTablePanel().exportSortConfig());
             }
+
+            // 5. Split Pane Right Pane Width
+            preferences.setRightPaneWidth(frame.getRightPaneWidth());
 
             save();
         }

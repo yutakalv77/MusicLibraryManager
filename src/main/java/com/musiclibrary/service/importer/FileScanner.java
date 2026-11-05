@@ -86,7 +86,8 @@ public class FileScanner {
         if (path == null) {
             return false;
         }
-        String fileName = path.getFileName() != null ? path.getFileName().toString() : "";
+        Path fileNamePath = path.getFileName();
+        String fileName = fileNamePath != null ? fileNamePath.toString() : "";
         int dotIndex = fileName.lastIndexOf('.');
         if (dotIndex < 0) {
             return false;

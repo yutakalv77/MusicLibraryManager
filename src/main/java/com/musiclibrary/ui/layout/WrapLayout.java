@@ -18,10 +18,12 @@ public class WrapLayout extends FlowLayout {
         super();
     }
 
+    @SuppressWarnings("MagicConstant")
     public WrapLayout(int align) {
         super(align);
     }
 
+    @SuppressWarnings("MagicConstant")
     public WrapLayout(int align, int hgap, int vgap) {
         super(align, hgap, vgap);
     }
@@ -40,13 +42,11 @@ public class WrapLayout extends FlowLayout {
 
     private Dimension layoutSize(Container target, boolean preferred) {
         synchronized (target.getTreeLock()) {
-            int targetWidth = target.getSize().width;
-
             Container container = target;
             while (container.getSize().width == 0 && container.getParent() != null) {
                 container = container.getParent();
             }
-            targetWidth = container.getSize().width;
+            int targetWidth = container.getSize().width;
 
             if (targetWidth == 0) {
                 targetWidth = Integer.MAX_VALUE;
