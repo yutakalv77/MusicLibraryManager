@@ -278,6 +278,8 @@ class LibraryControllerTest {
         // Setup playlist containing t1
         Playlist p = controller.createPlaylist("Cascade Test");
         controller.addTracksToPlaylist(p.getId(), List.of("t1", "t2"));
+        // Flush pending EDT events from createPlaylist
+        com.musiclibrary.util.SwingUtils.runOnEdtAndWait(() -> {});
 
         // Switch to ALL_SONGS section
         controller.showLibrarySection(SidebarPanel.LibrarySection.ALL_SONGS);

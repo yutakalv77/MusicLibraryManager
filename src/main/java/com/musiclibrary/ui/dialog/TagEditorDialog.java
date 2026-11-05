@@ -3,6 +3,7 @@ package com.musiclibrary.ui.dialog;
 import com.musiclibrary.i18n.I18nManager;
 import com.musiclibrary.model.Track;
 import com.musiclibrary.model.TrackMetadataUpdate;
+import com.musiclibrary.repository.GenreRepository;
 import com.musiclibrary.service.cache.ArtworkCache;
 import com.musiclibrary.util.FormatUtils;
 import com.musiclibrary.util.TimeFormatter;
@@ -37,6 +38,7 @@ import java.awt.event.KeyEvent;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -45,8 +47,10 @@ import java.util.function.Consumer;
  * Modal dialog for editing ID3 metadata tags.
  * Supports both single-track detailed editing and multi-track batch editing.
  */
-@SuppressWarnings({"this-escape"})
+@SuppressWarnings({"this-escape", "serial"})
 public class TagEditorDialog extends JDialog {
+
+    private static final System.Logger LOGGER = System.getLogger(TagEditorDialog.class.getName());
 
     private static final String[] COMMON_GENRES = {
             "", "Rock", "Pop", "Jazz", "Classical", "Hip Hop", "Electronic",
@@ -55,6 +59,7 @@ public class TagEditorDialog extends JDialog {
 
     private final List<Track> tracks;
     private final boolean isSingleMode;
+    private final GenreRepository genreRepository;
     private final Consumer<TrackMetadataUpdate> onSaveCallback;
 
     // Form fields
@@ -80,16 +85,29 @@ public class TagEditorDialog extends JDialog {
     private boolean saved = false;
 
     /**
-     * Constructs a tag editor dialog for single or multiple tracks.
+     * Constructs a tag editor dialog for single or multiple tracks (fallback without GenreRepository).
      *
      * @param owner          parent window
      * @param tracks         list of tracks to edit
      * @param onSaveCallback callback receiving the constructed TrackMetadataUpdate on confirm
      */
     public TagEditorDialog(Window owner, List<Track> tracks, Consumer<TrackMetadataUpdate> onSaveCallback) {
+        this(owner, tracks, null, onSaveCallback);
+    }
+
+    /**
+     * Constructs a tag editor dialog with a GenreRepository.
+     *
+     * @param owner           parent window
+     * @param tracks          list of tracks to edit
+     * @param genreRepository repository to load and persist genres
+     * @param onSaveCallback  callback receiving the constructed TrackMetadataUpdate on confirm
+     */
+    public TagEditorDialog(Window owner, List<Track> tracks, GenreRepository genreRepository, Consumer<TrackMetadataUpdate> onSaveCallback) {
         super(owner, ModalityType.APPLICATION_MODAL);
         this.tracks = (tracks != null) ? tracks : List.of();
         this.isSingleMode = (this.tracks.size() == 1);
+        this.genreRepository = genreRepository;
         this.onSaveCallback = onSaveCallback;
 
         if (this.isSingleMode) {
@@ -224,12 +242,56 @@ public class TagEditorDialog extends JDialog {
 
         gbc.gridx = 1;
         gbc.weightx = 1.0;
-        genreCombo = new JComboBox<>(COMMON_GENRES);
+
+        List<String> genreList = new ArrayList<>();
+        genreList.add("");
+        if (genreRepository != null) {
+            try {
+                genreList.addAll(genreRepository.findAllNames());
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.WARNING, "Failed to load genres from repository: " + e.getMessage(), e);
+                for (String g : COMMON_GENRES) {
+                    if (!g.isEmpty()) {
+                        genreList.add(g);
+                    }
+                }
+            }
+        } else {
+            for (String g : COMMON_GENRES) {
+                if (!g.isEmpty()) {
+                    genreList.add(g);
+                }
+            }
+        }
+
+        genreCombo = new JComboBox<>(genreList.toArray(new String[0]));
         genreCombo.setEditable(true);
+
+        String initialGenre = null;
         if (isSingleMode && firstTrack != null) {
-            genreCombo.setSelectedItem(firstTrack.getGenre());
+            initialGenre = firstTrack.getGenre();
         } else if (allShareSameValue(Track::getGenre)) {
-            genreCombo.setSelectedItem(tracks.getFirst().getGenre());
+            initialGenre = tracks.getFirst().getGenre();
+        }
+
+        if (initialGenre != null && !initialGenre.isBlank()) {
+            String trimmed = initialGenre.trim();
+            boolean exists = false;
+            String match = null;
+            for (int i = 0; i < genreCombo.getItemCount(); i++) {
+                String item = genreCombo.getItemAt(i);
+                if (item != null && item.equalsIgnoreCase(trimmed)) {
+                    exists = true;
+                    match = item;
+                    break;
+                }
+            }
+            if (!exists) {
+                genreCombo.addItem(trimmed);
+                genreCombo.setSelectedItem(trimmed);
+            } else {
+                genreCombo.setSelectedItem(match);
+            }
         } else {
             genreCombo.setSelectedItem("");
         }
@@ -453,12 +515,21 @@ public class TagEditorDialog extends JDialog {
         // 3. Build TrackMetadataUpdate
         TrackMetadataUpdate.Builder builder = TrackMetadataUpdate.builder();
 
+        Object genreObj = genreCombo.getSelectedItem();
+        String genreText = (genreObj != null) ? genreObj.toString().trim() : "";
+        if (!genreText.isEmpty() && genreRepository != null) {
+            try {
+                genreRepository.findOrCreate(genreText);
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.WARNING, "Failed to persist genre: " + e.getMessage(), e);
+            }
+        }
+
         if (isSingleMode) {
             builder.title(titleField.getText().trim());
             builder.artist(artistField.getText().trim());
             builder.album(albumField.getText().trim());
-            Object genreObj = genreCombo.getSelectedItem();
-            builder.genre(genreObj != null ? genreObj.toString().trim() : "");
+            builder.genre(genreText);
             builder.year(parsedYear);
             builder.trackNumber(parsedTrackNumber);
         } else {
@@ -473,8 +544,6 @@ public class TagEditorDialog extends JDialog {
                 builder.album(albumText);
             }
 
-            Object genreObj = genreCombo.getSelectedItem();
-            String genreText = genreObj != null ? genreObj.toString().trim() : "";
             if (!genreText.isEmpty()) {
                 builder.genre(genreText);
             }
@@ -531,4 +600,5 @@ public class TagEditorDialog extends JDialog {
     public JButton getSaveButton() { return saveButton; }
     public JButton getCancelButton() { return cancelButton; }
     public JButton getClearArtworkButton() { return clearArtworkButton; }
+    public GenreRepository getGenreRepository() { return genreRepository; }
 }

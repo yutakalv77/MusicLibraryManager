@@ -31,7 +31,9 @@ import com.musiclibrary.model.Album;
 import com.musiclibrary.model.Artist;
 import com.musiclibrary.model.Account;
 import com.musiclibrary.model.PlaylistFolder;
+import com.musiclibrary.repository.GenreRepository;
 import com.musiclibrary.repository.SqliteAccountRepository;
+import com.musiclibrary.repository.SqliteGenreRepository;
 import com.musiclibrary.repository.SqlitePlaylistFolderRepository;
 import com.musiclibrary.repository.db.DatabaseManager;
 import com.musiclibrary.service.storage.LibraryStorage;
@@ -82,7 +84,7 @@ import java.util.Objects;
  * Main application window coordinating top control bar, left sidebar,
  * center track table, and bottom status bar in a 3-pane responsive layout.
  */
-@SuppressWarnings({"this-escape"})
+@SuppressWarnings({"this-escape", "serial"})
 public class MainFrame extends JFrame {
 
     private static final System.Logger LOGGER = System.getLogger(MainFrame.class.getName());
@@ -132,6 +134,7 @@ public class MainFrame extends JFrame {
     private Account currentAccount;
     private SqliteAccountRepository accountRepository;
     private SqlitePlaylistFolderRepository folderRepository;
+    private GenreRepository genreRepository;
     private LibraryStorage storage;
 
     private final LanguageChangeListener languageListener;
@@ -188,6 +191,7 @@ public class MainFrame extends JFrame {
             try {
                 this.accountRepository = new SqliteAccountRepository(this.dbManager);
                 this.folderRepository = new SqlitePlaylistFolderRepository(this.dbManager);
+                this.genreRepository = new SqliteGenreRepository(this.dbManager);
                 var existing = this.accountRepository.findById(Account.DEFAULT_ACCOUNT_ID);
                 if (existing.isPresent()) {
                     this.currentAccount = existing.get();
@@ -722,7 +726,8 @@ public class MainFrame extends JFrame {
         }
 
         I18nManager i18n = I18nManager.getInstance();
-        TagEditorDialog dialog = new TagEditorDialog(this, tracks, update -> {
+        ensureDbRepositories();
+        TagEditorDialog dialog = new TagEditorDialog(this, tracks, this.genreRepository, update -> {
             statusBarPanel.setStatus(i18n.get("tageditor.status.updating"));
             libraryController.updateTracksMetadata(
                     tracks,
@@ -1932,6 +1937,13 @@ public class MainFrame extends JFrame {
                 LOGGER.log(System.Logger.Level.ERROR, "Could not create folder repository: " + e.getMessage(), e);
             }
         }
+        if (genreRepository == null) {
+            try {
+                genreRepository = new SqliteGenreRepository(dbManager);
+            } catch (Exception e) {
+                LOGGER.log(System.Logger.Level.ERROR, "Could not create genre repository: " + e.getMessage(), e);
+            }
+        }
     }
 
     public Account getCurrentAccount() {
@@ -1965,5 +1977,9 @@ public class MainFrame extends JFrame {
 
     public SqliteAccountRepository getAccountRepository() {
         return accountRepository;
+    }
+
+    public GenreRepository getGenreRepository() {
+        return genreRepository;
     }
 }

@@ -4,6 +4,10 @@ import com.musiclibrary.i18n.AppLocale;
 import com.musiclibrary.i18n.I18nManager;
 import com.musiclibrary.model.Track;
 import com.musiclibrary.model.TrackMetadataUpdate;
+import com.musiclibrary.repository.GenreRepository;
+import com.musiclibrary.repository.SqliteGenreRepository;
+import com.musiclibrary.repository.db.DatabaseManager;
+import com.musiclibrary.repository.db.SchemaInitializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
@@ -427,6 +431,212 @@ class TagEditorDialogTest {
             assertThat(callbackCalled.get()).isFalse();
         } finally {
             dialog.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("Genre combo loads from GenreRepository and newly entered genre is persisted to DB on save")
+    void testGenrePersistenceWithGenreRepository() throws Exception {
+        try (DatabaseManager db = new DatabaseManager(":memory:")) {
+            SchemaInitializer.initialize(db);
+            GenreRepository genreRepo = new SqliteGenreRepository(db);
+
+            Track track = createTrack("t1", "Nightcall", "Kavinsky", "OutRun", "Electronic", 2013, 1);
+            AtomicReference<TrackMetadataUpdate> updateRef = new AtomicReference<>();
+
+            TagEditorDialog dialog = new TagEditorDialog(null, List.of(track), genreRepo, updateRef::set);
+            try {
+                // Verify initial combo has DB genres
+                assertThat(dialog.getGenreCombo().getItemCount()).isGreaterThan(10);
+                assertThat(dialog.getGenreCombo().getSelectedItem()).isEqualTo("Electronic");
+
+                // Type a new custom genre not in DB
+                assertThat(genreRepo.existsByName("Synthwave")).isFalse();
+                dialog.getGenreCombo().setSelectedItem("Synthwave");
+
+                dialog.getSaveButton().doClick();
+
+                assertThat(dialog.isSaved()).isTrue();
+                TrackMetadataUpdate update = updateRef.get();
+                assertThat(update).isNotNull();
+                assertThat(update.getGenre()).isEqualTo("Synthwave");
+
+                // Verify Synthwave was persisted to the database
+                assertThat(genreRepo.existsByName("Synthwave")).isTrue();
+            } finally {
+                dialog.dispose();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Track with custom genre not yet in repository is added to combo box model and selected")
+    void testUnknownTrackGenreAddedToComboModel() throws Exception {
+        try (DatabaseManager db = new DatabaseManager(":memory:")) {
+            SchemaInitializer.initialize(db);
+            GenreRepository genreRepo = new SqliteGenreRepository(db);
+
+            Track track = createTrack("t1", "Never Meant", "American Football", "LP1", "Midwest Emo", 1999, 1);
+
+            TagEditorDialog dialog = new TagEditorDialog(null, List.of(track), genreRepo, null);
+            try {
+                assertThat(genreRepo.existsByName("Midwest Emo")).isFalse();
+                assertThat(dialog.getGenreCombo().getSelectedItem()).isEqualTo("Midwest Emo");
+                boolean foundInItems = false;
+                for (int i = 0; i < dialog.getGenreCombo().getItemCount(); i++) {
+                    if ("Midwest Emo".equals(dialog.getGenreCombo().getItemAt(i))) {
+                        foundInItems = true;
+                        break;
+                    }
+                }
+                assertThat(foundInItems).isTrue();
+            } finally {
+                dialog.dispose();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Fallback to COMMON_GENRES when GenreRepository is null works seamlessly")
+    void testFallbackWhenGenreRepositoryIsNull() {
+        Track track = createTrack("t1", "Title", "Artist", "Album", "Rock", 2020, 1);
+        AtomicReference<TrackMetadataUpdate> updateRef = new AtomicReference<>();
+
+        TagEditorDialog dialog = new TagEditorDialog(null, List.of(track), null, updateRef::set);
+        try {
+            assertThat(dialog.getGenreRepository()).isNull();
+            assertThat(dialog.getGenreCombo().getSelectedItem()).isEqualTo("Rock");
+
+            dialog.getGenreCombo().setSelectedItem("Independent Label");
+            dialog.getSaveButton().doClick();
+
+            assertThat(dialog.isSaved()).isTrue();
+            assertThat(updateRef.get().getGenre()).isEqualTo("Independent Label");
+        } finally {
+            dialog.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("Saving with empty or whitespace genre does not insert empty genre into repository")
+    void testSavingEmptyGenreDoesNotPersistEmptyGenre() throws Exception {
+        try (DatabaseManager db = new DatabaseManager(":memory:")) {
+            SchemaInitializer.initialize(db);
+            GenreRepository genreRepo = new SqliteGenreRepository(db);
+            int initialCount = genreRepo.findAllNames().size();
+
+            Track track = createTrack("t1", "Title", "Artist", "Album", "Rock", 2020, 1);
+            AtomicReference<TrackMetadataUpdate> updateRef = new AtomicReference<>();
+
+            TagEditorDialog dialog = new TagEditorDialog(null, List.of(track), genreRepo, updateRef::set);
+            try {
+                // Clear genre selection to blank
+                dialog.getGenreCombo().setSelectedItem("   ");
+                dialog.getSaveButton().doClick();
+
+                assertThat(dialog.isSaved()).isTrue();
+                assertThat(genreRepo.findAllNames()).hasSize(initialCount);
+                assertThat(genreRepo.existsByName("")).isFalse();
+                assertThat(genreRepo.existsByName("   ")).isFalse();
+                assertThat(updateRef.get().getGenre()).isEmpty();
+            } finally {
+                dialog.dispose();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Multi-track batch editing with new genre persists genre and updates all tracks")
+    void testMultiTrackBatchEditingWithNewGenre() throws Exception {
+        try (DatabaseManager db = new DatabaseManager(":memory:")) {
+            SchemaInitializer.initialize(db);
+            GenreRepository genreRepo = new SqliteGenreRepository(db);
+
+            Track t1 = createTrack("t1", "Track 1", "Artist 1", "Album 1", "Rock", 2020, 1);
+            Track t2 = createTrack("t2", "Track 2", "Artist 2", "Album 2", "Jazz", 2021, 2);
+            AtomicReference<TrackMetadataUpdate> updateRef = new AtomicReference<>();
+
+            TagEditorDialog dialog = new TagEditorDialog(null, List.of(t1, t2), genreRepo, updateRef::set);
+            try {
+                assertThat(genreRepo.existsByName("Cyberpunk")).isFalse();
+                dialog.getGenreCombo().setSelectedItem("Cyberpunk");
+
+                dialog.getSaveButton().doClick();
+
+                assertThat(dialog.isSaved()).isTrue();
+                assertThat(genreRepo.existsByName("Cyberpunk")).isTrue();
+
+                TrackMetadataUpdate update = updateRef.get();
+                assertThat(update).isNotNull();
+                assertThat(update.isUpdateGenre()).isTrue();
+                assertThat(update.getGenre()).isEqualTo("Cyberpunk");
+                assertThat(update.isUpdateTitle()).isFalse();
+                assertThat(update.isUpdateTrackNumber()).isFalse();
+            } finally {
+                dialog.dispose();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Case-insensitive genre matching avoids duplicate persistence in database")
+    void testCaseInsensitiveGenreMatchingInDialog() throws Exception {
+        try (DatabaseManager db = new DatabaseManager(":memory:")) {
+            SchemaInitializer.initialize(db);
+            GenreRepository genreRepo = new SqliteGenreRepository(db);
+            int initialCount = genreRepo.findAllNames().size();
+
+            Track track = createTrack("t1", "Title", "Artist", "Album", "Classical", 2018, 1);
+            AtomicReference<TrackMetadataUpdate> updateRef = new AtomicReference<>();
+
+            TagEditorDialog dialog = new TagEditorDialog(null, List.of(track), genreRepo, updateRef::set);
+            try {
+                // Type lowercase "classical" matching existing "Classical"
+                dialog.getGenreCombo().setSelectedItem("classical");
+                dialog.getSaveButton().doClick();
+
+                assertThat(dialog.isSaved()).isTrue();
+                // Count should not increase as classical already exists
+                assertThat(genreRepo.findAllNames()).hasSize(initialCount);
+                assertThat(updateRef.get().getGenre()).isEqualTo("classical");
+            } finally {
+                dialog.dispose();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Real UI layout invariants: components have non-zero dimensions and editable genre combo")
+    void testRealUiLayoutAndInteractionInvariants() throws Exception {
+        try (DatabaseManager db = new DatabaseManager(":memory:")) {
+            SchemaInitializer.initialize(db);
+            GenreRepository genreRepo = new SqliteGenreRepository(db);
+
+            Track track = createTrack("t1", "Title", "Artist", "Album", "Rock", 2020, 1);
+            TagEditorDialog dialog = new TagEditorDialog(null, List.of(track), genreRepo, null);
+
+            try {
+                dialog.setSize(580, 520);
+                dialog.doLayout();
+
+                assertThat(dialog.getWidth()).isEqualTo(580);
+                assertThat(dialog.getHeight()).isEqualTo(520);
+
+                assertThat(dialog.getGenreCombo()).isNotNull();
+                assertThat(dialog.getGenreCombo().isEditable()).isTrue();
+                assertThat(dialog.getGenreCombo().isEnabled()).isTrue();
+
+                assertThat(dialog.getTitleField().isEnabled()).isTrue();
+                assertThat(dialog.getArtistField().isEnabled()).isTrue();
+                assertThat(dialog.getAlbumField().isEnabled()).isTrue();
+                assertThat(dialog.getYearField().isEnabled()).isTrue();
+                assertThat(dialog.getTrackNumberField().isEnabled()).isTrue();
+
+                assertThat(dialog.getSaveButton().isEnabled()).isTrue();
+                assertThat(dialog.getCancelButton().isEnabled()).isTrue();
+            } finally {
+                dialog.dispose();
+            }
         }
     }
 }
