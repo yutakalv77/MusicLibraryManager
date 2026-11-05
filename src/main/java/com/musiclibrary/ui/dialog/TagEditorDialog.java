@@ -52,11 +52,6 @@ public class TagEditorDialog extends JDialog {
 
     private static final System.Logger LOGGER = System.getLogger(TagEditorDialog.class.getName());
 
-    private static final String[] COMMON_GENRES = {
-            "", "Rock", "Pop", "Jazz", "Classical", "Hip Hop", "Electronic",
-            "Metal", "R&B", "Blues", "Folk", "Country", "Soundtrack", "Anime", "J-Pop", "Other"
-    };
-
     private final List<Track> tracks;
     private final boolean isSingleMode;
     private final GenreRepository genreRepository;
@@ -250,17 +245,6 @@ public class TagEditorDialog extends JDialog {
                 genreList.addAll(genreRepository.findAllNames());
             } catch (Exception e) {
                 LOGGER.log(System.Logger.Level.WARNING, "Failed to load genres from repository: " + e.getMessage(), e);
-                for (String g : COMMON_GENRES) {
-                    if (!g.isEmpty()) {
-                        genreList.add(g);
-                    }
-                }
-            }
-        } else {
-            for (String g : COMMON_GENRES) {
-                if (!g.isEmpty()) {
-                    genreList.add(g);
-                }
             }
         }
 

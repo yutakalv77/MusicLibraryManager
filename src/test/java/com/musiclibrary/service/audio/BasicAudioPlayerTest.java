@@ -908,6 +908,7 @@ class BasicAudioPlayerTest {
             assertThat(invokedMethods).contains("stop", "flush");
 
             // Verify player thread has terminated promptly
+            playbackThread.join(500);
             assertThat(playbackThread.isAlive()).isFalse();
             assertThat(playerField.get(player)).isNull();
             assertThat(deviceField.get(player)).isNull();

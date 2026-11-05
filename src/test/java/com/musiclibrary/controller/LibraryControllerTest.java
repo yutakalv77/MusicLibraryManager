@@ -971,6 +971,277 @@ class LibraryControllerTest {
         assertThat(trackWithArt.getArtworkData()).isNull();
     }
 
+    @Test
+    @DisplayName("updateTracksMetadata preserves continuous uninterrupted playback without stopping or restarting when updating playing track")
+    void testUpdateTracksMetadataActivelyPlayingTrackSeamlessContinuousPlayback() throws Exception {
+        TestAudioPlayer mockPlayer = new TestAudioPlayer();
+        mockPlayer.setCurrentTrack(track1);
+        mockPlayer.setState(com.musiclibrary.model.PlaybackState.PLAYING);
+        mockPlayer.setCurrentPosition(42);
+
+        controller.setAudioPlayer(mockPlayer);
+
+        TrackMetadataUpdate update = TrackMetadataUpdate.builder()
+                .title("Bohemian Rhapsody (Live)")
+                .genre("Classic Rock")
+                .build();
+
+        CountDownLatch latch = new CountDownLatch(1);
+        controller.updateTracksMetadata(List.of(track1), update, latch::countDown, null);
+
+        assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+        com.musiclibrary.util.SwingUtils.runOnEdtAndWait(() -> {});
+
+        // Player must NOT stop or restart; playback continues uninterrupted
+        assertThat(mockPlayer.stopCount).isZero();
+        assertThat(mockPlayer.playCount).isZero();
+        assertThat(mockPlayer.isPlaying()).isTrue();
+        assertThat(mockPlayer.getState()).isEqualTo(com.musiclibrary.model.PlaybackState.PLAYING);
+        assertThat(mockPlayer.getCurrentPositionSeconds()).isEqualTo(42);
+
+        // Verify metadata update, table update, search index update, and persistence
+        assertThat(track1.getTitle()).isEqualTo("Bohemian Rhapsody (Live)");
+        assertThat(track1.getGenre()).isEqualTo("Classic Rock");
+        assertThat(searchIndex.search("Live")).contains(track1.getId());
+        assertThat(testStorage.awaitSave(5000)).isTrue();
+    }
+
+    @Test
+    @DisplayName("updateTracksMetadata ensures player.stop() is never called and isPlaying() is maintained when updating playing track")
+    void testUpdateTracksMetadataPlayingTrackRestoration() throws Exception {
+        TestAudioPlayer mockPlayer = new TestAudioPlayer();
+        mockPlayer.setCurrentTrack(track1);
+        mockPlayer.setState(com.musiclibrary.model.PlaybackState.PLAYING);
+        mockPlayer.setCurrentPosition(88);
+
+        controller.setAudioPlayer(mockPlayer);
+
+        TrackMetadataUpdate update = TrackMetadataUpdate.builder()
+                .genre("Progressive Rock")
+                .year(1975)
+                .build();
+
+        CountDownLatch latch = new CountDownLatch(1);
+        controller.updateTracksMetadata(List.of(track1), update, latch::countDown, null);
+
+        assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+        com.musiclibrary.util.SwingUtils.runOnEdtAndWait(() -> {});
+
+        // Explicitly verify player.stop() was NEVER called and isPlaying() remained true
+        assertThat(mockPlayer.stopCount).isEqualTo(0);
+        assertThat(mockPlayer.isPlaying()).isTrue();
+        assertThat(mockPlayer.playCount).isEqualTo(0);
+        assertThat(mockPlayer.getState()).isEqualTo(com.musiclibrary.model.PlaybackState.PLAYING);
+
+        // Metadata, index, UI, and storage checks
+        assertThat(track1.getGenre()).isEqualTo("Progressive Rock");
+        assertThat(track1.getYear()).isEqualTo(1975);
+        assertThat(trackTablePanel.getTableModel().getTracks()).contains(track1);
+        assertThat(testStorage.awaitSave(5000)).isTrue();
+    }
+
+    @Test
+    @DisplayName("updateTracksMetadata maintains paused state without stopping or restarting when updating paused track")
+    void testUpdateTracksMetadataPausedTrackRestoration() throws Exception {
+        TestAudioPlayer mockPlayer = new TestAudioPlayer();
+        mockPlayer.setCurrentTrack(track2);
+        mockPlayer.setState(com.musiclibrary.model.PlaybackState.PAUSED);
+        mockPlayer.setCurrentPosition(15);
+
+        controller.setAudioPlayer(mockPlayer);
+
+        TrackMetadataUpdate update = TrackMetadataUpdate.builder()
+                .album("The Game (Deluxe Edition)")
+                .build();
+
+        CountDownLatch latch = new CountDownLatch(1);
+        controller.updateTracksMetadata(List.of(track2), update, latch::countDown, null);
+
+        assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+        com.musiclibrary.util.SwingUtils.runOnEdtAndWait(() -> {});
+
+        // Player must NOT be stopped or re-paused; remains quietly in PAUSED
+        assertThat(mockPlayer.stopCount).isZero();
+        assertThat(mockPlayer.playCount).isZero();
+        assertThat(mockPlayer.pauseCount).isZero();
+        assertThat(mockPlayer.getState()).isEqualTo(com.musiclibrary.model.PlaybackState.PAUSED);
+        assertThat(mockPlayer.getCurrentPositionSeconds()).isEqualTo(15);
+
+        assertThat(track2.getAlbum()).isEqualTo("The Game (Deluxe Edition)");
+        assertThat(testStorage.awaitSave(5000)).isTrue();
+    }
+
+    @Test
+    @DisplayName("updateTracksMetadata does not disturb player when modifying tracks not currently playing")
+    void testUpdateTracksMetadataInactiveTrackDoesNotAffectPlayer() throws Exception {
+        TestAudioPlayer mockPlayer = new TestAudioPlayer();
+        mockPlayer.setCurrentTrack(track1);
+        mockPlayer.setState(com.musiclibrary.model.PlaybackState.PLAYING);
+        mockPlayer.setCurrentPosition(55);
+
+        controller.setAudioPlayer(mockPlayer);
+
+        // Update track3 (different track)
+        TrackMetadataUpdate update = TrackMetadataUpdate.builder()
+                .title("Stairway Remaster")
+                .build();
+
+        CountDownLatch latch = new CountDownLatch(1);
+        controller.updateTracksMetadata(List.of(track3), update, latch::countDown, null);
+
+        assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+        com.musiclibrary.util.SwingUtils.runOnEdtAndWait(() -> {});
+
+        // Player should NOT have stopped or seeked
+        assertThat(mockPlayer.stopCount).isEqualTo(0);
+        assertThat(mockPlayer.playCount).isEqualTo(0);
+        assertThat(mockPlayer.getState()).isEqualTo(com.musiclibrary.model.PlaybackState.PLAYING);
+    }
+
+    @Test
+    @DisplayName("updateTracksMetadata leaves playback completely uninterrupted when tag writing fails on playing track")
+    void testUpdateTracksMetadataPlayingTrackRestorationOnError() throws Exception {
+        TestAudioPlayer mockPlayer = new TestAudioPlayer();
+        mockPlayer.setCurrentPosition(33);
+
+        TagWriter failingWriter = new TagWriter() {
+            @Override
+            public void write(Path targetFile, TrackMetadataUpdate update) throws IOException {
+                throw new IOException("Simulated write failure while playing");
+            }
+
+            @Override
+            public boolean supports(Path targetFile) {
+                return true;
+            }
+        };
+
+        Path dummyFile = Files.createFile(tempDir.resolve("playing_fail.mp3"));
+        Track playingTrack = Track.builder()
+                .id("play-fail-track")
+                .filePath(dummyFile.toString())
+                .title("Fail Song")
+                .build();
+        library.addTrack(playingTrack);
+        mockPlayer.setCurrentTrack(playingTrack);
+        mockPlayer.setState(com.musiclibrary.model.PlaybackState.PLAYING);
+
+        LibraryController customController = new LibraryController(
+                library, sidebarPanel, trackTablePanel, testStorage,
+                Path.of("test.json"), searchIndex, null, failingWriter, mockPlayer
+        );
+
+        try {
+            CountDownLatch latch = new CountDownLatch(1);
+            AtomicReference<Throwable> errorRef = new AtomicReference<>();
+            TrackMetadataUpdate update = TrackMetadataUpdate.builder().title("New Fail Title").build();
+
+            customController.updateTracksMetadata(List.of(playingTrack), update, () -> {}, error -> {
+                errorRef.set(error);
+                latch.countDown();
+            });
+
+            boolean completed = latch.await(10, TimeUnit.SECONDS);
+            assertThat(completed).isTrue();
+            assertThat(errorRef.get()).isInstanceOf(IOException.class).hasMessageContaining("Simulated write failure while playing");
+
+            com.musiclibrary.util.SwingUtils.runOnEdtAndWait(() -> {});
+
+            // Even when writing fails, player was NEVER stopped and playback remains PLAYING!
+            assertThat(mockPlayer.stopCount).isZero();
+            assertThat(mockPlayer.playCount).isZero();
+            assertThat(mockPlayer.isPlaying()).isTrue();
+            assertThat(mockPlayer.getState()).isEqualTo(com.musiclibrary.model.PlaybackState.PLAYING);
+            assertThat(mockPlayer.getCurrentPositionSeconds()).isEqualTo(33);
+        } finally {
+            customController.dispose();
+        }
+    }
+
+    // --- Test Audio Player Mock ---
+
+    private static class TestAudioPlayer implements com.musiclibrary.service.audio.AudioPlayer {
+        private com.musiclibrary.model.PlaybackState state = com.musiclibrary.model.PlaybackState.STOPPED;
+        private Track currentTrack = null;
+        private long currentPosition = 0;
+        int playCount = 0;
+        int pauseCount = 0;
+        int stopCount = 0;
+        long lastSeekSeconds = -1;
+
+        public void setState(com.musiclibrary.model.PlaybackState state) {
+            this.state = state;
+        }
+
+        public void setCurrentTrack(Track currentTrack) {
+            this.currentTrack = currentTrack;
+        }
+
+        public void setCurrentPosition(long currentPosition) {
+            this.currentPosition = currentPosition;
+        }
+
+        @Override
+        public void play(Track track) {
+            this.currentTrack = track;
+            this.state = com.musiclibrary.model.PlaybackState.PLAYING;
+            this.playCount++;
+        }
+
+        @Override
+        public void pause() {
+            this.state = com.musiclibrary.model.PlaybackState.PAUSED;
+            this.pauseCount++;
+        }
+
+        @Override
+        public void resume() {
+            this.state = com.musiclibrary.model.PlaybackState.PLAYING;
+        }
+
+        @Override
+        public void stop() {
+            this.state = com.musiclibrary.model.PlaybackState.STOPPED;
+            this.stopCount++;
+        }
+
+        @Override
+        public void seekTo(long seconds) {
+            this.lastSeekSeconds = seconds;
+            this.currentPosition = seconds;
+        }
+
+        @Override
+        public void setVolume(float volume) {}
+
+        @Override
+        public float getVolume() { return 1.0f; }
+
+        @Override
+        public com.musiclibrary.model.PlaybackState getState() { return state; }
+
+        @Override
+        public Track getCurrentTrack() { return currentTrack; }
+
+        @Override
+        public long getCurrentPositionSeconds() { return currentPosition; }
+
+        @Override
+        public long getTotalDurationSeconds() { return 300; }
+
+        @Override
+        public boolean isPlaying() { return state == com.musiclibrary.model.PlaybackState.PLAYING; }
+
+        @Override
+        public void addPlayerListener(com.musiclibrary.service.audio.PlayerListener listener) {}
+
+        @Override
+        public void removePlayerListener(com.musiclibrary.service.audio.PlayerListener listener) {}
+
+        @Override
+        public void close() {}
+    }
+
     // --- Test Storage Mock ---
 
     private static class TestLibraryStorage implements LibraryStorage {

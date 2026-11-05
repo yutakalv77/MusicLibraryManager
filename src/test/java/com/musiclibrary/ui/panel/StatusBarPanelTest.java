@@ -224,4 +224,70 @@ class StatusBarPanelTest {
         panel.updateLanguage();
         assertThat(panel.getSummaryLabel().getText()).contains("総再生時間: 160日 5時間");
     }
+
+    @Test
+    @DisplayName("StatusBarPanel layout places summaryLabel in WEST, statusLabel in CENTER, and progressBar in EAST to prevent visual overlap")
+    void testStatusBarLayoutConstraints() {
+        StatusBarPanel panel = new StatusBarPanel();
+        java.awt.BorderLayout layout = (java.awt.BorderLayout) panel.getLayout();
+
+        assertThat(layout.getLayoutComponent(java.awt.BorderLayout.WEST)).isSameAs(panel.getSummaryLabel());
+        assertThat(layout.getLayoutComponent(java.awt.BorderLayout.CENTER)).isSameAs(panel.getStatusLabel());
+        assertThat(layout.getLayoutComponent(java.awt.BorderLayout.EAST)).isSameAs(panel.getProgressBar());
+        assertThat(panel.getStatusLabel().getHorizontalAlignment()).isEqualTo(javax.swing.SwingConstants.RIGHT);
+    }
+
+    @Test
+    @DisplayName("setStatus configures tooltip for long text and clears tooltip on reset")
+    void testStatusToolTipBehavior() {
+        StatusBarPanel panel = new StatusBarPanel();
+
+        String longStatus = "Failed to update tags: java.nio.file.AccessDeniedException on C:\\Music\\song.mp3";
+        panel.setStatus(longStatus);
+        assertThat(panel.getStatusLabel().getText()).isEqualTo(longStatus);
+        assertThat(panel.getStatusLabel().getToolTipText()).isEqualTo(longStatus);
+
+        panel.setStatus(null);
+        assertThat(panel.getStatusLabel().getText()).isEqualTo("Ready");
+        assertThat(panel.getStatusLabel().getToolTipText()).isNull();
+    }
+
+    @Test
+    @DisplayName("StatusBarPanel layout ensures statusLabel never overlaps summaryLabel even with extremely long status string")
+    void testNoVisualOverlapWithLongText() {
+        StatusBarPanel panel = new StatusBarPanel();
+        panel.updateSummary(1234, 5678, 999999);
+        panel.setStatus("An extremely long status message that extends far across the bottom of the screen and would previously overlap".repeat(5));
+
+        panel.setSize(600, 26);
+        panel.doLayout();
+
+        int summaryRightEdge = panel.getSummaryLabel().getX() + panel.getSummaryLabel().getWidth();
+        int statusLeftEdge = panel.getStatusLabel().getX();
+
+        // The center statusLabel's X cannot be to the left of summaryLabel's right edge
+        assertThat(statusLeftEdge).isGreaterThanOrEqualTo(summaryRightEdge);
+    }
+
+    @Test
+    @DisplayName("StatusBarPanel layout ensures statusLabel never overlaps summaryLabel or progressBar across various panel widths")
+    void testNoVisualOverlapWithProgressBarAndVariousWidths() {
+        StatusBarPanel panel = new StatusBarPanel();
+        panel.updateSummary(58000, 13842000L, 129397096448L);
+        panel.setStatus("Failed to update tags: java.nio.file.FileSystemException: File locked by another process".repeat(3));
+        panel.showProgress(true, 0, 100);
+
+        for (int width : new int[]{400, 600, 800, 1200}) {
+            panel.setSize(width, 26);
+            panel.doLayout();
+
+            int summaryRightEdge = panel.getSummaryLabel().getX() + panel.getSummaryLabel().getWidth();
+            int statusLeftEdge = panel.getStatusLabel().getX();
+            int statusRightEdge = panel.getStatusLabel().getX() + panel.getStatusLabel().getWidth();
+            int progressLeftEdge = panel.getProgressBar().getX();
+
+            assertThat(statusLeftEdge).isGreaterThanOrEqualTo(summaryRightEdge);
+            assertThat(progressLeftEdge).isGreaterThanOrEqualTo(statusRightEdge);
+        }
+    }
 }

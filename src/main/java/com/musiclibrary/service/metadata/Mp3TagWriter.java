@@ -117,13 +117,7 @@ public class Mp3TagWriter implements TagWriter {
 
         try {
             mp3file.save(tempFile.toString());
-
-            // Move temp file over destination atomically
-            try {
-                Files.move(tempFile, filePath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(tempFile, filePath, StandardCopyOption.REPLACE_EXISTING);
-            }
+            replaceFileWithRetry(tempFile, filePath);
         } catch (Exception e) {
             throw new IOException("Failed to save updated ID3 tags to " + filePath + ": " + e.getMessage(), e);
         } finally {
@@ -131,6 +125,39 @@ public class Mp3TagWriter implements TagWriter {
                 Files.deleteIfExists(tempFile);
             } catch (IOException ignored) {
             }
+        }
+    }
+
+    private void replaceFileWithRetry(Path source, Path target) throws IOException {
+        IOException lastException = null;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+                try {
+                    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (AtomicMoveNotSupportedException e) {
+                    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+                }
+                return;
+            } catch (IOException e) {
+                lastException = e;
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Interrupted while waiting to replace file: " + target, ie);
+                }
+            }
+        }
+
+        // If Files.move still fails after retries, fallback to copy + delete
+        try {
+            Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+            Files.deleteIfExists(source);
+        } catch (IOException copyException) {
+            if (lastException != null) {
+                copyException.addSuppressed(lastException);
+            }
+            throw copyException;
         }
     }
 

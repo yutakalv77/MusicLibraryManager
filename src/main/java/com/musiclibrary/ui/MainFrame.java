@@ -341,8 +341,12 @@ public class MainFrame extends JFrame {
                         this.trackTablePanel,
                         this.storage,
                         effectiveStoragePath,
-                        this.searchIndex
+                        this.searchIndex,
+                        null,
+                        null,
+                        this.audioPlayer
                 );
+        this.libraryController.setAudioPlayer(this.audioPlayer);
         this.libraryController.addLibraryContentChangeListener(this::invalidateAlbumCache);
 
         this.libraryController.addNavigationListener(new LibraryController.ViewNavigationListener() {
@@ -737,7 +741,16 @@ public class MainFrame extends JFrame {
                         updateStatusBarSummary();
                     },
                     error -> {
-                        statusBarPanel.setStatus(i18n.format("tageditor.status.error", error.getMessage()));
+                        statusBarPanel.setStatus(i18n.get("tageditor.status.error_concise"));
+                        String message = (error != null && error.getMessage() != null && !error.getMessage().isBlank())
+                                ? error.getMessage()
+                                : (error != null ? error.toString() : "");
+                        JOptionPane.showMessageDialog(
+                                MainFrame.this,
+                                i18n.format("tageditor.dialog.error_message", message),
+                                i18n.get("tageditor.dialog.error_title"),
+                                JOptionPane.ERROR_MESSAGE
+                        );
                     }
             );
         });

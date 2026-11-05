@@ -7,15 +7,15 @@ import javax.swing.BorderFactory;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
+import javax.swing.SwingConstants;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 
 /**
  * Bottom status bar panel displaying library summary metrics (track count, total duration,
  * total file size) and a background progress indicator.
  */
-@SuppressWarnings({"this-escape"})
+@SuppressWarnings({"this-escape", "serial"})
 public class StatusBarPanel extends JPanel {
 
     private final JLabel summaryLabel;
@@ -39,17 +39,16 @@ public class StatusBarPanel extends JPanel {
         summaryLabel = new JLabel();
         add(summaryLabel, BorderLayout.WEST);
 
-        // Right: Status text & Progress Bar
-        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        // Center: Status text (aligned right)
         statusLabel = new JLabel();
+        statusLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        add(statusLabel, BorderLayout.CENTER);
 
+        // Right: Progress Bar
         progressBar = new JProgressBar();
         progressBar.setPreferredSize(new Dimension(140, 16));
         progressBar.setVisible(false);
-
-        rightPanel.add(statusLabel);
-        rightPanel.add(progressBar);
-        add(rightPanel, BorderLayout.EAST);
+        add(progressBar, BorderLayout.EAST);
 
         updateLanguage();
     }
@@ -67,8 +66,10 @@ public class StatusBarPanel extends JPanel {
 
         if (customStatusText != null) {
             statusLabel.setText(customStatusText);
+            statusLabel.setToolTipText(customStatusText);
         } else {
             statusLabel.setText(i18n.get("status.ready"));
+            statusLabel.setToolTipText(null);
         }
 
         revalidate();

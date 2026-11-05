@@ -7,6 +7,7 @@ import com.musiclibrary.model.Library;
 import com.musiclibrary.model.Playlist;
 import com.musiclibrary.model.Track;
 import com.musiclibrary.model.TrackMetadataUpdate;
+import com.musiclibrary.service.audio.AudioPlayer;
 import com.musiclibrary.service.cache.ArtworkCache;
 import com.musiclibrary.service.metadata.Mp3TagWriter;
 import com.musiclibrary.service.metadata.TagWriter;
@@ -51,6 +52,7 @@ public class LibraryController {
     private final FastSearchIndex searchIndex;
     private final MissingTrackResolver missingTrackResolver;
     private final TagWriter tagWriter;
+    private volatile AudioPlayer audioPlayer;
 
     private final List<ViewNavigationListener> navigationListeners = new CopyOnWriteArrayList<>();
     private final List<Runnable> libraryContentChangeListeners = new CopyOnWriteArrayList<>();
@@ -80,7 +82,7 @@ public class LibraryController {
                              LibraryStorage storage,
                              Path storagePath,
                              FastSearchIndex searchIndex) {
-        this(library, sidebarPanel, trackTablePanel, storage, storagePath, searchIndex, null, null);
+        this(library, sidebarPanel, trackTablePanel, storage, storagePath, searchIndex, null, null, null);
     }
 
     public LibraryController(Library library,
@@ -90,7 +92,7 @@ public class LibraryController {
                              Path storagePath,
                              FastSearchIndex searchIndex,
                              MissingTrackResolver missingTrackResolver) {
-        this(library, sidebarPanel, trackTablePanel, storage, storagePath, searchIndex, missingTrackResolver, null);
+        this(library, sidebarPanel, trackTablePanel, storage, storagePath, searchIndex, missingTrackResolver, null, null);
     }
 
     public LibraryController(Library library,
@@ -101,6 +103,18 @@ public class LibraryController {
                              FastSearchIndex searchIndex,
                              MissingTrackResolver missingTrackResolver,
                              TagWriter tagWriter) {
+        this(library, sidebarPanel, trackTablePanel, storage, storagePath, searchIndex, missingTrackResolver, tagWriter, null);
+    }
+
+    public LibraryController(Library library,
+                             SidebarPanel sidebarPanel,
+                             TrackTablePanel trackTablePanel,
+                             LibraryStorage storage,
+                             Path storagePath,
+                             FastSearchIndex searchIndex,
+                             MissingTrackResolver missingTrackResolver,
+                             TagWriter tagWriter,
+                             AudioPlayer audioPlayer) {
         this.library = Objects.requireNonNull(library, "library cannot be null");
         this.sidebarPanel = Objects.requireNonNull(sidebarPanel, "sidebarPanel cannot be null");
         this.trackTablePanel = Objects.requireNonNull(trackTablePanel, "trackTablePanel cannot be null");
@@ -109,6 +123,7 @@ public class LibraryController {
         this.searchIndex = searchIndex;
         this.missingTrackResolver = (missingTrackResolver != null) ? missingTrackResolver : new MissingTrackResolver();
         this.tagWriter = (tagWriter != null) ? tagWriter : new Mp3TagWriter();
+        this.audioPlayer = audioPlayer;
 
         wireUiListeners();
         syncPlaylistsToSidebar();
@@ -694,7 +709,15 @@ public class LibraryController {
         navigationListeners.clear();
     }
 
-    // --- Getters ---
+    // --- Getters & Setters ---
+
+    public AudioPlayer getAudioPlayer() {
+        return audioPlayer;
+    }
+
+    public void setAudioPlayer(AudioPlayer audioPlayer) {
+        this.audioPlayer = audioPlayer;
+    }
 
     public Library getLibrary() {
         return library;

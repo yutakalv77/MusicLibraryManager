@@ -261,6 +261,77 @@ class Mp3TagWriterTest {
                 .isInstanceOf(NullPointerException.class);
     }
 
+    @Test
+    @DisplayName("write performs rapid sequential tag updates reliably without file locks or temporary file leaks")
+    void testRapidSequentialTagUpdates() throws Exception {
+        Path mp3Path = tempDir.resolve("rapid_updates.mp3");
+        Files.write(mp3Path, createMinimalValidMp3("Initial", "Artist", "Album", "Rock", "2020", "1", null));
+
+        for (int i = 1; i <= 5; i++) {
+            TrackMetadataUpdate update = TrackMetadataUpdate.builder()
+                    .title("Updated Title " + i)
+                    .year(2020 + i)
+                    .build();
+            tagWriter.write(mp3Path, update);
+
+            Track extracted = extractor.extract(mp3Path);
+            assertThat(extracted.getTitle()).isEqualTo("Updated Title " + i);
+            assertThat(extracted.getYear()).isEqualTo(2020 + i);
+        }
+
+        // Verify no orphaned temporary files remain
+        try (var stream = Files.list(tempDir)) {
+            List<Path> files = stream.toList();
+            assertThat(files).allMatch(p -> !p.getFileName().toString().startsWith(".tmp_tag_"));
+        }
+    }
+
+    @Test
+    @DisplayName("replaceFileWithRetry succeeds and replaces target file cleanly")
+    void testReplaceFileWithRetryDirect() throws Exception {
+        Path source = tempDir.resolve("source.tmp");
+        Path target = tempDir.resolve("target.txt");
+        Files.writeString(source, "Source Content");
+        Files.writeString(target, "Old Target Content");
+
+        java.lang.reflect.Method method = Mp3TagWriter.class.getDeclaredMethod("replaceFileWithRetry", Path.class, Path.class);
+        method.setAccessible(true);
+        method.invoke(tagWriter, source, target);
+
+        assertThat(Files.readString(target)).isEqualTo("Source Content");
+        assertThat(Files.exists(source)).isFalse();
+    }
+
+    @Test
+    @DisplayName("replaceFileWithRetry successfully overwrites target file when target file is temporarily locked")
+    void testReplaceFileWithRetryWhenTemporarilyLocked() throws Exception {
+        Path source = tempDir.resolve("source_retry.tmp");
+        Path target = tempDir.resolve("target_retry.txt");
+        Files.writeString(source, "Source Updated");
+        Files.writeString(target, "Original Content");
+
+        // Lock file briefly (25ms) using FileOutputStream
+        java.io.FileOutputStream fos = new java.io.FileOutputStream(target.toFile(), true);
+        java.nio.channels.FileLock lock = fos.getChannel().tryLock();
+
+        java.util.concurrent.Executors.newSingleThreadScheduledExecutor().schedule(() -> {
+            try {
+                if (lock != null) {
+                    lock.release();
+                }
+                fos.close();
+            } catch (Exception ignored) {
+            }
+        }, 25, java.util.concurrent.TimeUnit.MILLISECONDS);
+
+        java.lang.reflect.Method method = Mp3TagWriter.class.getDeclaredMethod("replaceFileWithRetry", Path.class, Path.class);
+        method.setAccessible(true);
+        method.invoke(tagWriter, source, target);
+
+        assertThat(Files.readString(target)).isEqualTo("Source Updated");
+        assertThat(Files.exists(source)).isFalse();
+    }
+
     // --- Helper for creating minimal valid MP3 with ID3v2.4 and MPEG audio frame ---
 
     private static byte[] createMinimalValidMp3(

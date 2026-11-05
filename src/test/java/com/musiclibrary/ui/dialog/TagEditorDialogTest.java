@@ -497,7 +497,7 @@ class TagEditorDialogTest {
     }
 
     @Test
-    @DisplayName("Fallback to COMMON_GENRES when GenreRepository is null works seamlessly")
+    @DisplayName("Dialog initializes safely with track genre and saves edits when GenreRepository is null")
     void testFallbackWhenGenreRepositoryIsNull() {
         Track track = createTrack("t1", "Title", "Artist", "Album", "Rock", 2020, 1);
         AtomicReference<TrackMetadataUpdate> updateRef = new AtomicReference<>();
@@ -506,6 +506,9 @@ class TagEditorDialogTest {
         try {
             assertThat(dialog.getGenreRepository()).isNull();
             assertThat(dialog.getGenreCombo().getSelectedItem()).isEqualTo("Rock");
+            assertThat(dialog.getGenreCombo().getItemCount()).isEqualTo(2);
+            assertThat(dialog.getGenreCombo().getItemAt(0)).isEqualTo("");
+            assertThat(dialog.getGenreCombo().getItemAt(1)).isEqualTo("Rock");
 
             dialog.getGenreCombo().setSelectedItem("Independent Label");
             dialog.getSaveButton().doClick();
