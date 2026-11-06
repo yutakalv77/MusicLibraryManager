@@ -13,7 +13,7 @@ import com.musiclibrary.model.Playlist;
 import com.musiclibrary.model.RepeatMode;
 import com.musiclibrary.model.Track;
 import com.musiclibrary.service.audio.AudioPlayer;
-import com.musiclibrary.service.audio.BasicAudioPlayer;
+import com.musiclibrary.service.audio.AudioPlayerFactory;
 import com.musiclibrary.service.audio.PlayerListener;
 import com.musiclibrary.service.importer.FolderWatcherService;
 import com.musiclibrary.service.importer.ImportProgressListener;
@@ -210,7 +210,7 @@ public class MainFrame extends JFrame {
         this.library = Objects.requireNonNull(library, "library cannot be null");
         this.importService = (importService != null) ? importService : new LibraryImportService(this.library, effectiveStoragePath);
         this.folderWatcherService = new FolderWatcherService(this.importService);
-        this.audioPlayer = (customAudioPlayer != null) ? customAudioPlayer : new BasicAudioPlayer();
+        this.audioPlayer = (customAudioPlayer != null) ? customAudioPlayer : AudioPlayerFactory.createDefaultPlayer();
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1100, 720);
