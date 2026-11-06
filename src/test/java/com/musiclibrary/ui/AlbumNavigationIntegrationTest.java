@@ -148,7 +148,7 @@ class AlbumNavigationIntegrationTest {
     }
 
     @Test
-    @DisplayName("Search filter dynamically filters album grid and retains or clears right pane based on whether selected album remains matched")
+    @DisplayName("Search filter dynamically filters album grid while preserving right pane album detail")
     void testSearchInAlbumGridWithSelectionSync() {
         mainFrame.getSidebarPanel().selectSection(SidebarPanel.LibrarySection.ALBUMS);
 
@@ -173,20 +173,37 @@ class AlbumNavigationIntegrationTest {
         assertThat(mainFrame.getTrackTablePanel().getTableModel().getTracks()).containsExactly(track1, track2);
         assertThat(mainFrame.getTrackTablePanel().getTable().getRowCount()).isEqualTo(2);
 
-        // 2. Search query that excludes selected album ("Floyd") -> selection clears and right pane becomes empty
+        // 2. Search query that excludes selected album ("Floyd") -> grid filters but right pane (header + tracks) is preserved
         mainFrame.getControlBarPanel().getSearchField().setText("Floyd");
         assertThat(mainFrame.getAlbumGridViewPanel().getDisplayedAlbums()).hasSize(1);
         assertThat(mainFrame.getAlbumGridViewPanel().getDisplayedAlbums().get(0).getTitle()).isEqualTo("The Dark Side of the Moon");
         assertThat(mainFrame.getAlbumGridViewPanel().getSelectedAlbum()).isNull();
-        assertThat(mainFrame.getAlbumHeaderPanel().isVisible()).isFalse();
-        assertThat(mainFrame.getAlbumHeaderPanel().getAlbum()).isNull();
-        assertThat(mainFrame.getTrackTablePanel().getTableModel().getRowCount()).isZero();
+        assertThat(mainFrame.getAlbumHeaderPanel().isVisible()).isTrue();
+        assertThat(mainFrame.getAlbumHeaderPanel().getAlbum()).isEqualTo(queenAlbum);
+        assertThat(mainFrame.getTrackTablePanel().getTableModel().getTracks()).containsExactly(track1, track2);
+        assertThat(mainFrame.getTrackTablePanel().getTable().getRowCount()).isEqualTo(2);
 
-        // 3. Clear search query -> all albums displayed, right pane remains empty until an album is selected
+        // Search query matching nothing at all ("NonExistentXYZ") -> grid is empty but right pane is preserved
+        mainFrame.getControlBarPanel().getSearchField().setText("NonExistentXYZ");
+        assertThat(mainFrame.getAlbumGridViewPanel().getDisplayedAlbums()).isEmpty();
+        assertThat(mainFrame.getAlbumGridViewPanel().getSelectedAlbum()).isNull();
+        assertThat(mainFrame.getAlbumHeaderPanel().isVisible()).isTrue();
+        assertThat(mainFrame.getAlbumHeaderPanel().getAlbum()).isEqualTo(queenAlbum);
+        assertThat(mainFrame.getTrackTablePanel().getTableModel().getTracks()).containsExactly(track1, track2);
+        assertThat(mainFrame.getTrackTablePanel().getTable().getRowCount()).isEqualTo(2);
+
+        // 3. Search query matching album1 via track title ("Bohemian") -> Queen album matches and is displayed
+        mainFrame.getControlBarPanel().getSearchField().setText("Bohemian");
+        assertThat(mainFrame.getAlbumGridViewPanel().getDisplayedAlbums()).hasSize(1);
+        assertThat(mainFrame.getAlbumGridViewPanel().getSelectedAlbum()).isEqualTo(queenAlbum);
+        assertThat(mainFrame.getAlbumHeaderPanel().isVisible()).isTrue();
+
+        // 4. Clear search query -> all albums displayed, Queen album selection restored in grid and right pane preserved
         mainFrame.getControlBarPanel().getSearchField().setText("");
         assertThat(mainFrame.getAlbumGridViewPanel().getDisplayedAlbums()).hasSize(2);
-        assertThat(mainFrame.getAlbumGridViewPanel().getSelectedAlbum()).isNull();
-        assertThat(mainFrame.getAlbumHeaderPanel().isVisible()).isFalse();
+        assertThat(mainFrame.getAlbumGridViewPanel().getSelectedAlbum()).isEqualTo(queenAlbum);
+        assertThat(mainFrame.getAlbumHeaderPanel().isVisible()).isTrue();
+        assertThat(mainFrame.getAlbumHeaderPanel().getAlbum()).isEqualTo(queenAlbum);
     }
 
     @Test
@@ -569,15 +586,31 @@ class AlbumNavigationIntegrationTest {
         assertThat(mainFrame.getAlbumHeaderPanel().isVisible()).isTrue();
         assertThat(mainFrame.getTrackTablePanel().getTableModel().getTracks()).containsExactly(track3);
 
-        // Filter excluding Pink Floyd -> clears selection and empties right pane
+        // Filter excluding Pink Floyd -> grid filters but right pane (header + tracks) is preserved
         mainFrame.getControlBarPanel().getSearchField().setText("Queen");
         assertThat(mainFrame.getArtistGridViewPanel().getDisplayedArtists()).hasSize(1);
         assertThat(mainFrame.getArtistGridViewPanel().getSelectedArtist()).isNull();
-        assertThat(mainFrame.getAlbumHeaderPanel().isVisible()).isFalse();
-        assertThat(mainFrame.getAlbumHeaderPanel().getArtist()).isNull();
-        assertThat(mainFrame.getTrackTablePanel().getTableModel().getRowCount()).isZero();
+        assertThat(mainFrame.getAlbumHeaderPanel().isVisible()).isTrue();
+        assertThat(mainFrame.getAlbumHeaderPanel().getArtist()).isEqualTo(floydArtist);
+        assertThat(mainFrame.getTrackTablePanel().getTableModel().getTracks()).containsExactly(track3);
+        assertThat(mainFrame.getTrackTablePanel().getTable().getRowCount()).isEqualTo(1);
+
+        // Filter matching nothing -> grid is empty but right pane is preserved
+        mainFrame.getControlBarPanel().getSearchField().setText("NonExistentXYZ");
+        assertThat(mainFrame.getArtistGridViewPanel().getDisplayedArtists()).isEmpty();
+        assertThat(mainFrame.getArtistGridViewPanel().getSelectedArtist()).isNull();
+        assertThat(mainFrame.getAlbumHeaderPanel().isVisible()).isTrue();
+        assertThat(mainFrame.getAlbumHeaderPanel().getArtist()).isEqualTo(floydArtist);
+        assertThat(mainFrame.getTrackTablePanel().getTableModel().getTracks()).containsExactly(track3);
+
+        // Filter matching by track title ("Time") -> Floyd artist matches and is displayed
+        mainFrame.getControlBarPanel().getSearchField().setText("Time");
+        assertThat(mainFrame.getArtistGridViewPanel().getDisplayedArtists()).hasSize(1);
+        assertThat(mainFrame.getArtistGridViewPanel().getSelectedArtist()).isEqualTo(floydArtist);
+        assertThat(mainFrame.getAlbumHeaderPanel().isVisible()).isTrue();
 
         mainFrame.getControlBarPanel().getSearchField().setText("");
+        assertThat(mainFrame.getArtistGridViewPanel().getSelectedArtist()).isEqualTo(floydArtist);
 
         // 5. Switch to ALL_SONGS -> restores standard multi-column table
         mainFrame.getSidebarPanel().selectSection(SidebarPanel.LibrarySection.ALL_SONGS);

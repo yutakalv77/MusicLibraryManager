@@ -1591,6 +1591,380 @@ class MainFrameTest {
         }
     }
 
+    @Test
+    @DisplayName("Language change preserves active album detail, track list, and selection in right pane without resetting")
+    void testLanguageChangePreservesAlbumDetailAndSelection() {
+        Library library = new Library();
+        for (int i = 0; i < 20; i++) {
+            Track t = Track.builder()
+                    .id("trk-" + i)
+                    .filePath("trk_" + i + ".mp3")
+                    .title("Song " + i)
+                    .artist("Artist " + i)
+                    .album("Album " + (i / 2))
+                    .build();
+            library.addTrack(t);
+        }
+
+        MainFrame frame = new MainFrame(library, null);
+        try {
+            frame.setSize(1000, 700);
+            frame.showAlbumGrid(false);
+            frame.doLayout();
+
+            var albums = frame.getOrComputeAlbums();
+            assertThat(albums).isNotEmpty();
+            var targetAlbum = albums.get(0);
+
+            // Open album detail in right pane
+            frame.openAlbumDetail(targetAlbum);
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+            assertThat(frame.getAlbumHeaderPanel().getAlbum()).isEqualTo(targetAlbum);
+            assertThat(frame.getTrackTablePanel().getTableModel().getTracks()).isEqualTo(targetAlbum.getTracks());
+            assertThat(frame.getAlbumGridViewPanel().getSelectedAlbum()).isEqualTo(targetAlbum);
+
+            // Change language to Japanese
+            I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+            frame.updateLanguage();
+
+            // Verify album detail, header, tracks, and selection are NOT cleared or reset
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+            assertThat(frame.getAlbumHeaderPanel().getAlbum()).isEqualTo(targetAlbum);
+            assertThat(frame.getTrackTablePanel().getTableModel().getTracks()).isEqualTo(targetAlbum.getTracks());
+            assertThat(frame.getAlbumGridViewPanel().getSelectedAlbum()).isEqualTo(targetAlbum);
+
+            // Change language back to English
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+            frame.updateLanguage();
+
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+            assertThat(frame.getAlbumHeaderPanel().getAlbum()).isEqualTo(targetAlbum);
+            assertThat(frame.getTrackTablePanel().getTableModel().getTracks()).isEqualTo(targetAlbum.getTracks());
+            assertThat(frame.getAlbumGridViewPanel().getSelectedAlbum()).isEqualTo(targetAlbum);
+        } finally {
+            frame.dispose();
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        }
+    }
+
+    @Test
+    @DisplayName("Language change preserves album grid scroll position without scrolling back to top")
+    void testLanguageChangePreservesAlbumGridScrollPosition() {
+        Library library = new Library();
+        for (int i = 0; i < 50; i++) {
+            Track t = Track.builder()
+                    .id("trk-" + i)
+                    .filePath("trk_" + i + ".mp3")
+                    .title("Song " + i)
+                    .artist("Artist " + i)
+                    .album("Album " + i)
+                    .build();
+            library.addTrack(t);
+        }
+
+        MainFrame frame = new MainFrame(library, null);
+        try {
+            frame.setSize(800, 600);
+            frame.showAlbumGrid(false);
+            frame.doLayout();
+
+            var grid = frame.getAlbumGridViewPanel();
+            grid.setSize(800, 500);
+            grid.getScrollPane().setSize(800, 500);
+            grid.getScrollPane().doLayout();
+
+            int max = grid.getScrollPane().getVerticalScrollBar().getMaximum() - grid.getScrollPane().getVerticalScrollBar().getVisibleAmount();
+            assertThat(max).isPositive();
+            int testScrollOffset = Math.max(20, max / 2);
+            grid.getScrollPane().getVerticalScrollBar().setValue(testScrollOffset);
+            assertThat(grid.getScrollPane().getVerticalScrollBar().getValue()).isEqualTo(testScrollOffset);
+
+            // Switch to Japanese
+            I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+            frame.updateLanguage();
+
+            // Scroll position should not be reset to 0
+            assertThat(grid.getScrollPane().getVerticalScrollBar().getValue()).isEqualTo(testScrollOffset);
+
+            // Switch back to English
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+            frame.updateLanguage();
+
+            assertThat(grid.getScrollPane().getVerticalScrollBar().getValue()).isEqualTo(testScrollOffset);
+        } finally {
+            frame.dispose();
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        }
+    }
+
+    @Test
+    @DisplayName("Language change preserves active artist detail, track list, and selection in right pane without resetting")
+    void testLanguageChangePreservesArtistDetailAndSelection() {
+        Library library = new Library();
+        for (int i = 0; i < 20; i++) {
+            Track t = Track.builder()
+                    .id("trk-" + i)
+                    .filePath("trk_" + i + ".mp3")
+                    .title("Song " + i)
+                    .artist("Artist " + (i / 2))
+                    .album("Album " + i)
+                    .build();
+            library.addTrack(t);
+        }
+
+        MainFrame frame = new MainFrame(library, null);
+        try {
+            frame.setSize(1000, 700);
+            frame.showArtistGrid(false);
+            frame.doLayout();
+
+            var artists = frame.getOrComputeArtists();
+            assertThat(artists).isNotEmpty();
+            var targetArtist = artists.get(0);
+
+            // Open artist detail in right pane
+            frame.openArtistDetail(targetArtist);
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+            assertThat(frame.getAlbumHeaderPanel().getArtist()).isEqualTo(targetArtist);
+            assertThat(frame.getTrackTablePanel().getTableModel().getTracks()).isEqualTo(targetArtist.getTracks());
+            assertThat(frame.getArtistGridViewPanel().getSelectedArtist()).isEqualTo(targetArtist);
+
+            // Change language to Japanese
+            I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+            frame.updateLanguage();
+
+            // Verify artist detail, header, tracks, and selection are NOT cleared or reset
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+            assertThat(frame.getAlbumHeaderPanel().getArtist()).isEqualTo(targetArtist);
+            assertThat(frame.getTrackTablePanel().getTableModel().getTracks()).isEqualTo(targetArtist.getTracks());
+            assertThat(frame.getArtistGridViewPanel().getSelectedArtist()).isEqualTo(targetArtist);
+
+            // Change language back to English
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+            frame.updateLanguage();
+
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+            assertThat(frame.getAlbumHeaderPanel().getArtist()).isEqualTo(targetArtist);
+            assertThat(frame.getTrackTablePanel().getTableModel().getTracks()).isEqualTo(targetArtist.getTracks());
+            assertThat(frame.getArtistGridViewPanel().getSelectedArtist()).isEqualTo(targetArtist);
+        } finally {
+            frame.dispose();
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        }
+    }
+
+    @Test
+    @DisplayName("Language change preserves selected row in track table without resetting")
+    void testLanguageChangePreservesTrackTableSelection() {
+        Library library = new Library();
+        for (int i = 0; i < 10; i++) {
+            Track t = Track.builder()
+                    .id("trk-" + i)
+                    .filePath("trk_" + i + ".mp3")
+                    .title("Song " + i)
+                    .artist("Artist " + i)
+                    .album("Album " + i)
+                    .build();
+            library.addTrack(t);
+        }
+
+        MainFrame frame = new MainFrame(library, null);
+        try {
+            frame.setSize(800, 600);
+            frame.doLayout();
+
+            var table = frame.getTrackTablePanel().getTable();
+            table.setRowSelectionInterval(3, 3);
+            assertThat(table.getSelectedRow()).isEqualTo(3);
+
+            // Switch to Japanese
+            I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+            frame.updateLanguage();
+
+            // Row selection preserved & status bar summary localized
+            assertThat(table.getSelectedRow()).isEqualTo(3);
+            assertThat(frame.getStatusBarPanel().getSummaryLabel().getText()).contains("10 曲");
+            assertThat(frame.getStatusBarPanel().getStatusLabel().getText()).isEqualTo("準備完了");
+
+            // Switch back to English
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+            frame.updateLanguage();
+
+            assertThat(table.getSelectedRow()).isEqualTo(3);
+            assertThat(frame.getStatusBarPanel().getSummaryLabel().getText()).contains("10 tracks");
+            assertThat(frame.getStatusBarPanel().getStatusLabel().getText()).isEqualTo("Ready");
+        } finally {
+            frame.dispose();
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        }
+    }
+
+    @Test
+    @DisplayName("Language change preserves artist grid scroll position without scrolling back to top")
+    void testLanguageChangePreservesArtistGridScrollPosition() {
+        Library library = new Library();
+        for (int i = 0; i < 50; i++) {
+            Track t = Track.builder()
+                    .id("trk-" + i)
+                    .filePath("trk_" + i + ".mp3")
+                    .title("Song " + i)
+                    .artist("Artist " + i)
+                    .album("Album " + i)
+                    .build();
+            library.addTrack(t);
+        }
+
+        MainFrame frame = new MainFrame(library, null);
+        try {
+            frame.setSize(800, 600);
+            frame.showArtistGrid(false);
+            frame.doLayout();
+
+            var grid = frame.getArtistGridViewPanel();
+            grid.setSize(800, 500);
+            grid.getScrollPane().setSize(800, 500);
+            grid.getScrollPane().doLayout();
+
+            int max = grid.getScrollPane().getVerticalScrollBar().getMaximum() - grid.getScrollPane().getVerticalScrollBar().getVisibleAmount();
+            assertThat(max).isPositive();
+            int testScrollOffset = Math.max(20, max / 2);
+            grid.getScrollPane().getVerticalScrollBar().setValue(testScrollOffset);
+            assertThat(grid.getScrollPane().getVerticalScrollBar().getValue()).isEqualTo(testScrollOffset);
+
+            // Switch to Japanese
+            I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+            frame.updateLanguage();
+
+            // Scroll position should not be reset to 0
+            assertThat(grid.getScrollPane().getVerticalScrollBar().getValue()).isEqualTo(testScrollOffset);
+
+            // Switch back to English
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+            frame.updateLanguage();
+
+            assertThat(grid.getScrollPane().getVerticalScrollBar().getValue()).isEqualTo(testScrollOffset);
+        } finally {
+            frame.dispose();
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        }
+    }
+
+    @Test
+    @DisplayName("Language change preserves active playlist view, tracks, and sidebar selection")
+    void testLanguageChangePreservesPlaylistSelectionAndTracks() {
+        Library library = new Library();
+        Track t1 = Track.builder().id("t1").filePath("t1.mp3").title("Track 1").artist("A").album("B").build();
+        Track t2 = Track.builder().id("t2").filePath("t2.mp3").title("Track 2").artist("A").album("B").build();
+        library.addTrack(t1);
+        library.addTrack(t2);
+
+        MainFrame frame = new MainFrame(library, null);
+        try {
+            frame.setSize(800, 600);
+            frame.doLayout();
+
+            Playlist playlist = frame.getLibraryController().createPlaylist("Favorites");
+            frame.getLibraryController().addTracksToPlaylist(playlist.getId(), List.of(t1.getId(), t2.getId()));
+
+            // Select playlist in sidebar
+            frame.getSidebarPanel().selectPlaylist(playlist.getId());
+
+            assertThat(frame.getSidebarPanel().getSelectedPlaylist().getId()).isEqualTo(playlist.getId());
+            assertThat(frame.getTrackTablePanel().getTableModel().getTracks()).containsExactly(t1, t2);
+
+            // Switch to Japanese
+            I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+            frame.updateLanguage();
+
+            assertThat(frame.getSidebarPanel().getSelectedPlaylist().getId()).isEqualTo(playlist.getId());
+            assertThat(frame.getTrackTablePanel().getTableModel().getTracks()).containsExactly(t1, t2);
+
+            // Switch back to English
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+            frame.updateLanguage();
+
+            assertThat(frame.getSidebarPanel().getSelectedPlaylist().getId()).isEqualTo(playlist.getId());
+            assertThat(frame.getTrackTablePanel().getTableModel().getTracks()).containsExactly(t1, t2);
+        } finally {
+            frame.dispose();
+            I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        }
+    }
+
+    @Test
+    @DisplayName("Search box input while album or artist detail is open preserves right pane header and track list across matching and non-matching queries")
+    void testSearchWhileDetailOpenPreservesRightPaneAndSummary() {
+        Library library = new Library();
+        Track t1 = Track.builder().id("t1").filePath("t1.mp3").title("Bohemian Rhapsody").artist("Queen").album("A Night at the Opera").build();
+        Track t2 = Track.builder().id("t2").filePath("t2.mp3").title("Love of My Life").artist("Queen").album("A Night at the Opera").build();
+        Track t3 = Track.builder().id("t3").filePath("t3.mp3").title("Time").artist("Pink Floyd").album("The Dark Side of the Moon").build();
+        library.addTrack(t1);
+        library.addTrack(t2);
+        library.addTrack(t3);
+
+        MainFrame frame = new MainFrame(library, null);
+        try {
+            frame.setSize(1000, 700);
+            frame.showAlbumGrid(false);
+            frame.doLayout();
+
+            var albums = frame.getOrComputeAlbums();
+            var queenAlbum = albums.stream().filter(a -> a.getTitle().equals("A Night at the Opera")).findFirst().orElseThrow();
+
+            // 1. Open Album Detail
+            frame.openAlbumDetail(queenAlbum);
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+            assertThat(frame.getAlbumHeaderPanel().getAlbum()).isEqualTo(queenAlbum);
+            assertThat(frame.getTrackTablePanel().getTableModel().getTracks()).containsExactly(t1, t2);
+
+            // 2. Type non-matching search query
+            frame.getControlBarPanel().getSearchField().setText("NonExistentQuery");
+            assertThat(frame.getAlbumGridViewPanel().getDisplayedAlbums()).isEmpty();
+            // Right pane MUST NOT be cleared
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+            assertThat(frame.getAlbumHeaderPanel().getAlbum()).isEqualTo(queenAlbum);
+            assertThat(frame.getTrackTablePanel().getTableModel().getTracks()).containsExactly(t1, t2);
+
+            // 3. Type query matching via track title
+            frame.getControlBarPanel().getSearchField().setText("Bohemian");
+            assertThat(frame.getAlbumGridViewPanel().getDisplayedAlbums()).hasSize(1);
+            assertThat(frame.getAlbumGridViewPanel().getSelectedAlbum()).isEqualTo(queenAlbum);
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+
+            // 4. Clear search query
+            frame.getControlBarPanel().getSearchField().setText("");
+            assertThat(frame.getAlbumGridViewPanel().getDisplayedAlbums()).hasSize(2);
+            assertThat(frame.getAlbumGridViewPanel().getSelectedAlbum()).isEqualTo(queenAlbum);
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+
+            // 5. Test ARTISTS view
+            frame.showArtistGrid(false);
+            frame.doLayout();
+            var artists = frame.getArtistGridViewPanel().getAllArtists();
+            var queenArtist = artists.stream().filter(a -> a.getName().equals("Queen")).findFirst().orElseThrow();
+
+            frame.openArtistDetail(queenArtist);
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+            assertThat(frame.getAlbumHeaderPanel().getArtist()).isEqualTo(queenArtist);
+            assertThat(frame.getTrackTablePanel().getTableModel().getTracks()).containsExactly(t1, t2);
+
+            // Non-matching query in artist view
+            frame.getControlBarPanel().getSearchField().setText("NonExistentQuery");
+            assertThat(frame.getArtistGridViewPanel().getDisplayedArtists()).isEmpty();
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+            assertThat(frame.getAlbumHeaderPanel().getArtist()).isEqualTo(queenArtist);
+            assertThat(frame.getTrackTablePanel().getTableModel().getTracks()).containsExactly(t1, t2);
+
+            // Clear query in artist view
+            frame.getControlBarPanel().getSearchField().setText("");
+            assertThat(frame.getArtistGridViewPanel().getDisplayedArtists()).hasSize(2);
+            assertThat(frame.getArtistGridViewPanel().getSelectedArtist()).isEqualTo(queenArtist);
+            assertThat(frame.getAlbumHeaderPanel().isVisible()).isTrue();
+        } finally {
+            frame.dispose();
+        }
+    }
+
     private byte[] createTestImageBytes(int width, int height, java.awt.Color color) {
         try {
             java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(width, height, java.awt.image.BufferedImage.TYPE_INT_RGB);

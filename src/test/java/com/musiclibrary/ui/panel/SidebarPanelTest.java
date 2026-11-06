@@ -256,4 +256,63 @@ class SidebarPanelTest {
         panel.getNewFolderMenuItem().doClick();
         assertThat(actionInvoked.get()).isTrue();
     }
+
+    @Test
+    @DisplayName("updateLanguage does not trigger section selection listener and preserves selected section")
+    void testUpdateLanguageDoesNotTriggerSectionSelectionListener() {
+        SidebarPanel panel = new SidebarPanel();
+        java.util.concurrent.atomic.AtomicInteger callCount = new java.util.concurrent.atomic.AtomicInteger();
+        panel.setOnSectionSelectedAction(section -> callCount.incrementAndGet());
+
+        panel.selectSection(SidebarPanel.LibrarySection.ALBUMS);
+        assertThat(callCount.get()).isPositive();
+        callCount.set(0);
+
+        // Language switch should not fire section selected callback and should retain selection index
+        I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+        panel.updateLanguage();
+
+        assertThat(callCount.get()).isEqualTo(0);
+        assertThat(panel.getLibraryList().getSelectedIndex()).isEqualTo(SidebarPanel.LibrarySection.ALBUMS.ordinal());
+
+        // Switch back to English
+        I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        panel.updateLanguage();
+
+        assertThat(callCount.get()).isEqualTo(0);
+        assertThat(panel.getLibraryList().getSelectedIndex()).isEqualTo(SidebarPanel.LibrarySection.ALBUMS.ordinal());
+
+        // Subsequent user interaction must work normally (internal updating flag cleared)
+        panel.getLibraryList().setSelectedIndex(SidebarPanel.LibrarySection.ARTISTS.ordinal());
+        assertThat(callCount.get()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("updateLanguage preserves playlist selection without triggering section or playlist callbacks")
+    void testUpdateLanguagePreservesPlaylistSelectionWithoutTriggeringNavigation() {
+        SidebarPanel panel = new SidebarPanel();
+        Playlist p = new Playlist("p-1", "My Playlist");
+        panel.setPlaylists(List.of(p));
+        panel.selectPlaylist("p-1");
+
+        java.util.concurrent.atomic.AtomicInteger sectionCalls = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger playlistCalls = new java.util.concurrent.atomic.AtomicInteger();
+        panel.setOnSectionSelectedAction(sec -> sectionCalls.incrementAndGet());
+        panel.setOnPlaylistSelectedAction(pl -> playlistCalls.incrementAndGet());
+
+        I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+        panel.updateLanguage();
+
+        assertThat(sectionCalls.get()).isEqualTo(0);
+        assertThat(playlistCalls.get()).isEqualTo(0);
+        assertThat(panel.getSelectedPlaylist()).isEqualTo(p);
+        assertThat(panel.getPlaylistList().getSelectedIndex()).isEqualTo(0);
+        assertThat(panel.getLibraryList().getSelectedIndex()).isEqualTo(-1);
+
+        // Subsequent user interaction must work normally
+        Playlist p2 = new Playlist("p-2", "Second Playlist");
+        panel.setPlaylists(List.of(p, p2));
+        panel.getPlaylistList().setSelectedIndex(1);
+        assertThat(playlistCalls.get()).isEqualTo(1);
+    }
 }

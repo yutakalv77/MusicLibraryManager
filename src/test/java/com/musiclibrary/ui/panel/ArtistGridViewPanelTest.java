@@ -71,11 +71,37 @@ class ArtistGridViewPanelTest {
         assertThat(gridPanel.getDisplayedArtists().get(0)).isEqualTo(artist1);
         assertThat(gridPanel.getSelectedArtist()).isNull();
         assertThat(gridPanel.getCardPanels()).allMatch(c -> !c.isSelected());
-        assertThat(callbackArtist.get()).isNull();
+        // onArtistSelectedAction is not triggered with null so right pane is not cleared
+        assertThat(callbackArtist.get()).isEqualTo(artist2);
+
+        // Filter matching artist2 via track title ("Song 2")
+        gridPanel.filterArtists("Song 2");
+        assertThat(gridPanel.getDisplayedArtists()).hasSize(1);
+        assertThat(gridPanel.getDisplayedArtists().get(0)).isEqualTo(artist2);
+        assertThat(gridPanel.getSelectedArtist()).isEqualTo(artist2);
+        assertThat(gridPanel.getCardPanels().get(0).isSelected()).isTrue();
+
+        // Filter matching artist1 via track album ("The Wall")
+        gridPanel.filterArtists("The Wall");
+        assertThat(gridPanel.getDisplayedArtists()).hasSize(1);
+        assertThat(gridPanel.getDisplayedArtists().get(0)).isEqualTo(artist1);
+        assertThat(gridPanel.getSelectedArtist()).isNull();
+        assertThat(gridPanel.getCardPanels()).allMatch(c -> !c.isSelected());
+        assertThat(callbackArtist.get()).isEqualTo(artist2);
+
+        // Filter that matches nothing at all ("NonExistentXYZ")
+        gridPanel.filterArtists("NonExistentXYZ");
+        assertThat(gridPanel.getDisplayedArtists()).isEmpty();
+        assertThat(gridPanel.getSelectedArtist()).isNull();
+        assertThat(gridPanel.getCardPanels()).isEmpty();
+        assertThat(callbackArtist.get()).isEqualTo(artist2);
 
         // Clear filter
         gridPanel.filterArtists("");
         assertThat(gridPanel.getDisplayedArtists()).hasSize(2);
+        assertThat(gridPanel.getSelectedArtist()).isEqualTo(artist2);
+        assertThat(gridPanel.getCardPanels().get(1).isSelected()).isTrue();
+        assertThat(callbackArtist.get()).isEqualTo(artist2);
     }
 
     @Test

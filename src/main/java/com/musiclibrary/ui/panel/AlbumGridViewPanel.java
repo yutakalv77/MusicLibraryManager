@@ -132,7 +132,7 @@ public class AlbumGridViewPanel extends JPanel {
     }
 
     /**
-     * Filters displayed albums by case-insensitive matching on title or artist.
+     * Filters displayed albums by case-insensitive matching on title, artist, or track titles.
      *
      * @param query search query
      */
@@ -143,22 +143,37 @@ public class AlbumGridViewPanel extends JPanel {
             String lower = query.trim().toLowerCase(Locale.ROOT);
             List<Album> filtered = new ArrayList<>();
             for (Album album : allAlbums) {
-                if (album.getTitle().toLowerCase(Locale.ROOT).contains(lower) ||
-                    album.getArtist().toLowerCase(Locale.ROOT).contains(lower)) {
+                if (matchesAlbumQuery(album, lower)) {
                     filtered.add(album);
                 }
             }
             this.displayedAlbums = filtered;
         }
-        boolean hadSelection = (this.selectedAlbum != null);
         if (this.selectedAlbum != null) {
             this.selectedAlbum = findMatchingAlbum(this.selectedAlbum, this.displayedAlbums);
+        } else if (this.lastSelectedAlbum != null) {
+            this.selectedAlbum = findMatchingAlbum(this.lastSelectedAlbum, this.displayedAlbums);
         }
         renderCards();
         scrollPane.getVerticalScrollBar().setValue(0);
-        if (hadSelection && this.selectedAlbum == null && onAlbumSelectedAction != null) {
-            onAlbumSelectedAction.accept(null);
+    }
+
+    private boolean matchesAlbumQuery(Album album, String lowerQuery) {
+        if (album.getTitle() != null && album.getTitle().toLowerCase(Locale.ROOT).contains(lowerQuery)) {
+            return true;
         }
+        if (album.getArtist() != null && album.getArtist().toLowerCase(Locale.ROOT).contains(lowerQuery)) {
+            return true;
+        }
+        if (album.getTracks() != null) {
+            for (Track track : album.getTracks()) {
+                if (track != null && track.getTitle() != null &&
+                        track.getTitle().toLowerCase(Locale.ROOT).contains(lowerQuery)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void renderCards() {

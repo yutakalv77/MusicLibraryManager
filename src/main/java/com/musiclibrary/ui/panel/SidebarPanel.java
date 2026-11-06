@@ -71,6 +71,8 @@ public class SidebarPanel extends JPanel {
     private Consumer<Playlist> onPlaylistSelectedAction;
     private BiConsumer<Playlist, List<String>> onTracksDroppedOnPlaylistAction;
 
+    private boolean isInternalUpdating = false;
+
     public SidebarPanel() {
         setLayout(new BorderLayout());
         setPreferredSize(new Dimension(210, 0));
@@ -195,6 +197,9 @@ public class SidebarPanel extends JPanel {
 
         // 5. Mutually exclusive selection and navigation callbacks
         libraryList.addListSelectionListener(e -> {
+            if (isInternalUpdating) {
+                return;
+            }
             if (!e.getValueIsAdjusting()) {
                 int idx = libraryList.getSelectedIndex();
                 if (idx != -1) {
@@ -212,6 +217,9 @@ public class SidebarPanel extends JPanel {
         libraryList.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+                if (isInternalUpdating) {
+                    return;
+                }
                 if (SwingUtilities.isLeftMouseButton(e)) {
                     int idx = libraryList.locationToIndex(e.getPoint());
                     if (idx != -1) {
@@ -228,6 +236,9 @@ public class SidebarPanel extends JPanel {
         });
 
         playlistList.addListSelectionListener(e -> {
+            if (isInternalUpdating) {
+                return;
+            }
             if (!e.getValueIsAdjusting()) {
                 int idx = playlistList.getSelectedIndex();
                 if (idx != -1) {
@@ -271,15 +282,32 @@ public class SidebarPanel extends JPanel {
         deletePlaylistItem.setText(i18n.get("sidebar.playlist.delete"));
         newFolderMenuItem.setText(i18n.get("sidebar.new_folder", "New Folder"));
 
-        int selectedLibIndex = libraryList.getSelectedIndex();
-        libraryListModel.clear();
-        libraryListModel.addElement("🎵  " + i18n.get("sidebar.all_songs"));
-        libraryListModel.addElement("👤  " + i18n.get("sidebar.artists"));
-        libraryListModel.addElement("💿  " + i18n.get("sidebar.albums"));
-        libraryListModel.addElement("🕒  " + i18n.get("sidebar.recently_added"));
+        boolean wasUpdating = isInternalUpdating;
+        isInternalUpdating = true;
+        try {
+            int selectedLibIndex = libraryList.getSelectedIndex();
+            String[] items = new String[] {
+                    "🎵  " + i18n.get("sidebar.all_songs"),
+                    "👤  " + i18n.get("sidebar.artists"),
+                    "💿  " + i18n.get("sidebar.albums"),
+                    "🕒  " + i18n.get("sidebar.recently_added")
+            };
 
-        if (selectedLibIndex >= 0 && selectedLibIndex < libraryListModel.size()) {
-            libraryList.setSelectedIndex(selectedLibIndex);
+            if (libraryListModel.getSize() == items.length) {
+                for (int i = 0; i < items.length; i++) {
+                    libraryListModel.set(i, items[i]);
+                }
+            } else {
+                libraryListModel.clear();
+                for (String item : items) {
+                    libraryListModel.addElement(item);
+                }
+                if (selectedLibIndex >= 0 && selectedLibIndex < libraryListModel.size()) {
+                    libraryList.setSelectedIndex(selectedLibIndex);
+                }
+            }
+        } finally {
+            isInternalUpdating = wasUpdating;
         }
 
         revalidate();

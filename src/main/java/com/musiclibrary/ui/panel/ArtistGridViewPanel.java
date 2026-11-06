@@ -2,6 +2,7 @@ package com.musiclibrary.ui.panel;
 
 import com.musiclibrary.i18n.I18nManager;
 import com.musiclibrary.model.Artist;
+import com.musiclibrary.model.Track;
 import com.musiclibrary.ui.layout.WrapLayout;
 
 import javax.swing.BorderFactory;
@@ -129,7 +130,7 @@ public class ArtistGridViewPanel extends JPanel {
     }
 
     /**
-     * Filters displayed artists by case-insensitive matching on artist name.
+     * Filters displayed artists by case-insensitive matching on artist name, tracks, or albums.
      *
      * @param query search query
      */
@@ -140,21 +141,38 @@ public class ArtistGridViewPanel extends JPanel {
             String lower = query.trim().toLowerCase(Locale.ROOT);
             List<Artist> filtered = new ArrayList<>();
             for (Artist artist : allArtists) {
-                if (artist.getName().toLowerCase(Locale.ROOT).contains(lower)) {
+                if (matchesArtistQuery(artist, lower)) {
                     filtered.add(artist);
                 }
             }
             this.displayedArtists = filtered;
         }
-        boolean hadSelection = (this.selectedArtist != null);
         if (this.selectedArtist != null) {
             this.selectedArtist = findMatchingArtist(this.selectedArtist, this.displayedArtists);
+        } else if (this.lastSelectedArtist != null) {
+            this.selectedArtist = findMatchingArtist(this.lastSelectedArtist, this.displayedArtists);
         }
         renderCards();
         scrollPane.getVerticalScrollBar().setValue(0);
-        if (hadSelection && this.selectedArtist == null && onArtistSelectedAction != null) {
-            onArtistSelectedAction.accept(null);
+    }
+
+    private boolean matchesArtistQuery(Artist artist, String lowerQuery) {
+        if (artist.getName() != null && artist.getName().toLowerCase(Locale.ROOT).contains(lowerQuery)) {
+            return true;
         }
+        if (artist.getTracks() != null) {
+            for (Track track : artist.getTracks()) {
+                if (track != null) {
+                    if (track.getTitle() != null && track.getTitle().toLowerCase(Locale.ROOT).contains(lowerQuery)) {
+                        return true;
+                    }
+                    if (track.getAlbum() != null && track.getAlbum().toLowerCase(Locale.ROOT).contains(lowerQuery)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private void renderCards() {

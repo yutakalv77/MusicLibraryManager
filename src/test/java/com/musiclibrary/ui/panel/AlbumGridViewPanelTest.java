@@ -343,6 +343,27 @@ class AlbumGridViewPanelTest {
         gridPanel.filterAlbums("Floyd");
         assertThat(gridPanel.getSelectedAlbum()).isNull();
         assertThat(gridPanel.getCardPanels()).allMatch(c -> !c.isSelected());
-        assertThat(callbackAlbum.get()).isNull();
+        // onAlbumSelectedAction is not triggered with null so right pane is not cleared
+        assertThat(callbackAlbum.get()).isEqualTo(album1);
+
+        // Filter that matches album1 via track title ("Song 1")
+        gridPanel.filterAlbums("Song 1");
+        assertThat(gridPanel.getSelectedAlbum()).isEqualTo(album1);
+        assertThat(gridPanel.getCardPanels()).hasSize(1);
+        assertThat(gridPanel.getCardPanels().getFirst().isSelected()).isTrue();
+
+        // Filter that matches nothing at all ("NonExistentXYZ")
+        gridPanel.filterAlbums("NonExistentXYZ");
+        assertThat(gridPanel.getDisplayedAlbums()).isEmpty();
+        assertThat(gridPanel.getSelectedAlbum()).isNull();
+        assertThat(gridPanel.getCardPanels()).isEmpty();
+        assertThat(callbackAlbum.get()).isEqualTo(album1); // Callback still not triggered with null
+
+        // Clear filter -> restores both albums and restores album1 selection
+        gridPanel.filterAlbums("");
+        assertThat(gridPanel.getDisplayedAlbums()).hasSize(2);
+        assertThat(gridPanel.getSelectedAlbum()).isEqualTo(album1);
+        assertThat(gridPanel.getCardPanels().getFirst().isSelected()).isTrue();
+        assertThat(callbackAlbum.get()).isEqualTo(album1);
     }
 }

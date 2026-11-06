@@ -323,15 +323,9 @@ public class MainFrame extends JFrame {
         this.searchController.addQueryListener(query -> {
             if (isAlbumGridActive) {
                 albumGridViewPanel.filterAlbums(query);
-                if (albumGridViewPanel.getSelectedAlbum() == null) {
-                    clearAlbumDetail();
-                }
                 updateStatusBarSummary();
             } else if (isArtistGridActive) {
                 artistGridViewPanel.filterArtists(query);
-                if (artistGridViewPanel.getSelectedArtist() == null) {
-                    clearArtistDetail();
-                }
                 updateStatusBarSummary();
             }
         });
@@ -1644,6 +1638,7 @@ public class MainFrame extends JFrame {
             albumHeaderPanel.updateLanguage();
         }
         statusBarPanel.updateLanguage();
+        updateStatusBarSummary();
 
         updateLanguageSelection();
     }
