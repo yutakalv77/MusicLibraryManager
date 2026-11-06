@@ -93,19 +93,41 @@ flowchart TD
 
 ---
 
-## 2. 開発イテレーション・ワークフロー
+## 2. 開発イテレーション・ワークフロー（Feature Branch 運用）
+
+本プロジェクトでは、変更の安全性とGit履歴の可読性を高めるため、タスクごとに作業ブランチ（フィーチャーブランチ）を作成して開発・検証を進め、完了後に `master` へマージする運用を徹底します。
+
+```mermaid
+gitGraph
+   commit id: "master"
+   branch feature/xxx
+   checkout feature/xxx
+   commit id: "Developer実装"
+   commit id: "Tier 1 & Tier 2 テスト"
+   commit id: "Reviewer合格"
+   checkout master
+   merge feature/xxx id: "masterマージ"
+```
 
 各タスクは以下のサイクルで実行します。
 
-1. **タスク開始**: Orchestratorが対象タスクを明確にし、Developerに依頼する。
-2. **実装フェーズ**: Developerが実装を行い、コンパイル確認を行う。
-3. **テストフェーズ（2段階テスト戦略）**:
+1. **作業ブランチの作成（Orchestrator）**:
+   - `master` ブランチを最新状態にした上で、タスク内容を表すブランチを作成・チェックアウトする（例: `feature/xxx`, `fix/xxx`, `refactor/xxx`）。
+   - タスクを明確化し、Developer Agent へ依頼する。
+2. **実装フェーズ（Developer Agent）**:
+   - 作業ブランチ上で `docs/DESIGN.md` の設計仕様に従い実装を行う。
+   - コンパイル確認（`./gradlew compileJava`）を行う。
+3. **テストフェーズ（Tester Agent: 2段階テスト戦略）**:
    - (a) **Tier 1 影響範囲テスト**: Developerの実装・修正直後は、影響範囲のテストのみを実行して高速に合否を確認（5〜10秒）。不合格時はDeveloperへ差し戻し。
    - (b) **Tier 2 全件回帰テスト**: Tier 1 合格後、Reviewerへの引き渡し直前に全件テスト（`./gradlew test`）を1度実行し、全件GREENを確認する。
-4. **レビューフェーズ**: Reviewerがコードとテストを精査し、判定（PASS / NEEDS_REVISION）を出す。
-5. **完了判定**:
+4. **レビューフェーズ（Reviewer Agent）**:
+   - 作業ブランチ上のコードとテストを精査し、判定（PASS / NEEDS_REVISION）を出す。
+5. **ユーザー確認 & マージフェーズ（Orchestrator）**:
    - `NEEDS_REVISION` の場合: 指摘事項をDeveloperへフィードバックし、2に戻る。
-   - `PASS` の場合: Orchestratorがユーザーに進捗を報告し、次のタスクへ進行する。
+   - `PASS` の場合:
+     1. ユーザーへ作業ブランチでの完了報告を行い、動作確認を依頼する。
+     2. ユーザー確認OK後、作業ブランチの変更をコミットし、`master` ブランチへマージ（`git checkout master && git merge <branch>`）する。
+     3. マージ完了後、役目を終えた作業ブランチを削除する（`git branch -d <branch>`）。
 
 ---
 
