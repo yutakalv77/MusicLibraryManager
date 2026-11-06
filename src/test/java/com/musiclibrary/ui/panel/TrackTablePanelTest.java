@@ -682,14 +682,87 @@ class TrackTablePanelTest {
     }
 
     @Test
+    @DisplayName("Fix encoding context menu contains all options and triggers callbacks with correct Charsets")
+    void testFixEncodingContextMenuStructureAndCallbacks() {
+        TrackTablePanel panel = new TrackTablePanel();
+        Track t1 = Track.builder().id("1").title("Song 1").filePath("1.mp3").build();
+        Track t2 = Track.builder().id("2").title("Song 2").filePath("2.mp3").build();
+        panel.setTracks(List.of(t1, t2));
+
+        // Submenu items structure
+        assertThat(panel.getFixEncodingMenu()).isNotNull();
+        assertThat(panel.getFixAutoMenuItem()).isNotNull();
+        assertThat(panel.getFixSjisMenuItem()).isNotNull();
+        assertThat(panel.getFixUtf8MenuItem()).isNotNull();
+        assertThat(panel.getFixEucJpMenuItem()).isNotNull();
+
+        assertThat(panel.getFixEncodingMenu().getItemCount()).isEqualTo(4);
+        assertThat(panel.getFixEncodingMenu().getItem(0)).isSameAs(panel.getFixAutoMenuItem());
+        assertThat(panel.getFixEncodingMenu().getItem(1)).isSameAs(panel.getFixSjisMenuItem());
+        assertThat(panel.getFixEncodingMenu().getItem(2)).isSameAs(panel.getFixUtf8MenuItem());
+        assertThat(panel.getFixEncodingMenu().getItem(3)).isSameAs(panel.getFixEucJpMenuItem());
+
+        AtomicReference<List<Track>> tracksRef = new AtomicReference<>();
+        AtomicReference<java.nio.charset.Charset> charsetRef = new AtomicReference<>();
+        panel.setOnRepairEncodingAction((tracks, charset) -> {
+            tracksRef.set(tracks);
+            charsetRef.set(charset);
+        });
+
+        // 1. Single selection - Auto repair (null Charset)
+        panel.getTable().setRowSelectionInterval(0, 0);
+        panel.getFixAutoMenuItem().doClick();
+        assertThat(tracksRef.get()).containsExactly(t1);
+        assertThat(charsetRef.get()).isNull();
+
+        // 2. Multiple selection - Shift-JIS repair
+        panel.getTable().setRowSelectionInterval(0, 1);
+        panel.getFixSjisMenuItem().doClick();
+        assertThat(tracksRef.get()).containsExactly(t1, t2);
+        assertThat(charsetRef.get()).isEqualTo(com.musiclibrary.service.encoding.EncodingRepairService.CHARSET_CP932);
+
+        // 3. UTF-8 repair
+        panel.getFixUtf8MenuItem().doClick();
+        assertThat(tracksRef.get()).containsExactly(t1, t2);
+        assertThat(charsetRef.get()).isEqualTo(java.nio.charset.StandardCharsets.UTF_8);
+
+        // 4. EUC-JP repair
+        panel.getFixEucJpMenuItem().doClick();
+        assertThat(tracksRef.get()).containsExactly(t1, t2);
+        assertThat(charsetRef.get()).isEqualTo(com.musiclibrary.service.encoding.EncodingRepairService.CHARSET_EUCJP);
+
+        // 5. No selection - callback should not be invoked
+        tracksRef.set(null);
+        charsetRef.set(null);
+        panel.getTable().clearSelection();
+        panel.getFixAutoMenuItem().doClick();
+        assertThat(tracksRef.get()).isNull();
+
+        // 6. Language update reflects in menu and submenu labels
+        I18nManager.getInstance().setLocale(AppLocale.JAPANESE);
+        panel.updateLanguage();
+        assertThat(panel.getFixEncodingMenu().getText()).isEqualTo("文字化けを修復");
+        assertThat(panel.getFixAutoMenuItem().getText()).isEqualTo("自動修復");
+        assertThat(panel.getFixSjisMenuItem().getText()).isEqualTo("Shift-JIS として修復");
+        assertThat(panel.getFixUtf8MenuItem().getText()).isEqualTo("UTF-8 として修復");
+        assertThat(panel.getFixEucJpMenuItem().getText()).isEqualTo("EUC-JP として修復");
+
+        I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
+        panel.updateLanguage();
+        assertThat(panel.getFixEncodingMenu().getText()).isEqualTo("Fix Character Encoding");
+        assertThat(panel.getFixAutoMenuItem().getText()).isEqualTo("Auto Repair");
+    }
+
+    @Test
     @DisplayName("Open folder menu item is placed correctly in context menu and handles selection edge cases")
     void testOpenFolderContextMenuStructureAndSelection() {
         TrackTablePanel panel = new TrackTablePanel();
-        // Index 4 is editTagsMenuItem, Index 5 is openFolderMenuItem, Index 6 is separator, Index 7 is deleteMenuItem
-        assertThat(panel.getContextMenu().getComponent(5)).isSameAs(panel.getOpenFolderMenuItem());
+        // Index 4 is editTagsMenuItem, Index 5 is fixEncodingMenu, Index 6 is openFolderMenuItem, Index 7 is separator, Index 8 is deleteMenuItem
         assertThat(panel.getContextMenu().getComponent(4)).isSameAs(panel.getEditTagsMenuItem());
-        assertThat(panel.getContextMenu().getComponent(6)).isInstanceOf(javax.swing.JSeparator.class);
-        assertThat(panel.getContextMenu().getComponent(7)).isSameAs(panel.getDeleteMenuItem());
+        assertThat(panel.getContextMenu().getComponent(5)).isSameAs(panel.getFixEncodingMenu());
+        assertThat(panel.getContextMenu().getComponent(6)).isSameAs(panel.getOpenFolderMenuItem());
+        assertThat(panel.getContextMenu().getComponent(7)).isInstanceOf(javax.swing.JSeparator.class);
+        assertThat(panel.getContextMenu().getComponent(8)).isSameAs(panel.getDeleteMenuItem());
 
         // When no track is selected, callback should not be invoked
         AtomicReference<Track> openedRef = new AtomicReference<>();

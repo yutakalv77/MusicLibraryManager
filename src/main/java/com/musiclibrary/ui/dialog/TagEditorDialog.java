@@ -5,6 +5,7 @@ import com.musiclibrary.model.Track;
 import com.musiclibrary.model.TrackMetadataUpdate;
 import com.musiclibrary.repository.GenreRepository;
 import com.musiclibrary.service.cache.ArtworkCache;
+import com.musiclibrary.service.encoding.EncodingRepairService;
 import com.musiclibrary.util.FormatUtils;
 import com.musiclibrary.util.TimeFormatter;
 
@@ -58,12 +59,19 @@ public class TagEditorDialog extends JDialog {
     private final Consumer<TrackMetadataUpdate> onSaveCallback;
 
     // Form fields
+    private JComboBox<EncodingItem> encodingCombo;
     private JTextField titleField;
     private JTextField artistField;
     private JTextField albumField;
     private JComboBox<String> genreCombo;
     private JTextField yearField;
     private JTextField trackNumberField;
+
+    // Raw strings for encoding repair preview
+    private String rawTitle = "";
+    private String rawArtist = "";
+    private String rawAlbum = "";
+    private String rawGenre = "";
 
     // Artwork fields
     private JLabel artworkPreviewLabel;
@@ -108,6 +116,20 @@ public class TagEditorDialog extends JDialog {
         if (this.isSingleMode) {
             Track single = this.tracks.getFirst();
             this.pendingArtworkData = (single.getArtworkData() != null) ? single.getArtworkData().clone() : null;
+            this.rawTitle = (single.getTitle() != null) ? single.getTitle() : "";
+            this.rawArtist = (single.getArtist() != null) ? single.getArtist() : "";
+            this.rawAlbum = (single.getAlbum() != null) ? single.getAlbum() : "";
+            this.rawGenre = (single.getGenre() != null) ? single.getGenre() : "";
+        } else {
+            if (allShareSameValue(Track::getArtist)) {
+                this.rawArtist = (tracks.getFirst().getArtist() != null) ? tracks.getFirst().getArtist() : "";
+            }
+            if (allShareSameValue(Track::getAlbum)) {
+                this.rawAlbum = (tracks.getFirst().getAlbum() != null) ? tracks.getFirst().getAlbum() : "";
+            }
+            if (allShareSameValue(Track::getGenre)) {
+                this.rawGenre = (tracks.getFirst().getGenre() != null) ? tracks.getFirst().getGenre() : "";
+            }
         }
 
         initializeUi();
@@ -169,6 +191,103 @@ public class TagEditorDialog extends JDialog {
         pack();
     }
 
+    public enum EncodingMode {
+        RAW,
+        AUTO,
+        SJIS,
+        UTF8,
+        EUCJP
+    }
+
+    public static class EncodingItem {
+        private final EncodingMode mode;
+        private final String label;
+
+        public EncodingItem(EncodingMode mode, String label) {
+            this.mode = mode;
+            this.label = label;
+        }
+
+        public EncodingMode getMode() {
+            return mode;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
+    private void applyEncodingPreview() {
+        EncodingItem selected = (EncodingItem) encodingCombo.getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+
+        EncodingRepairService repairService = EncodingRepairService.getInstance();
+        String repairedTitle;
+        String repairedArtist;
+        String repairedAlbum;
+        String repairedGenre;
+
+        switch (selected.getMode()) {
+            case AUTO -> {
+                repairedTitle = repairService.autoRepair(rawTitle);
+                repairedArtist = repairService.autoRepair(rawArtist);
+                repairedAlbum = repairService.autoRepair(rawAlbum);
+                repairedGenre = repairService.autoRepair(rawGenre);
+            }
+            case SJIS -> {
+                repairedTitle = repairService.repair(rawTitle, EncodingRepairService.CHARSET_CP932);
+                repairedArtist = repairService.repair(rawArtist, EncodingRepairService.CHARSET_CP932);
+                repairedAlbum = repairService.repair(rawAlbum, EncodingRepairService.CHARSET_CP932);
+                repairedGenre = repairService.repair(rawGenre, EncodingRepairService.CHARSET_CP932);
+            }
+            case UTF8 -> {
+                repairedTitle = repairService.repair(rawTitle, EncodingRepairService.CHARSET_UTF8);
+                repairedArtist = repairService.repair(rawArtist, EncodingRepairService.CHARSET_UTF8);
+                repairedAlbum = repairService.repair(rawAlbum, EncodingRepairService.CHARSET_UTF8);
+                repairedGenre = repairService.repair(rawGenre, EncodingRepairService.CHARSET_UTF8);
+            }
+            case EUCJP -> {
+                repairedTitle = repairService.repair(rawTitle, EncodingRepairService.CHARSET_EUCJP);
+                repairedArtist = repairService.repair(rawArtist, EncodingRepairService.CHARSET_EUCJP);
+                repairedAlbum = repairService.repair(rawAlbum, EncodingRepairService.CHARSET_EUCJP);
+                repairedGenre = repairService.repair(rawGenre, EncodingRepairService.CHARSET_EUCJP);
+            }
+            case RAW -> {
+                repairedTitle = rawTitle;
+                repairedArtist = rawArtist;
+                repairedAlbum = rawAlbum;
+                repairedGenre = rawGenre;
+            }
+            default -> {
+                return;
+            }
+        }
+
+        if (isSingleMode) {
+            titleField.setText(repairedTitle);
+            artistField.setText(repairedArtist);
+            albumField.setText(repairedAlbum);
+            genreCombo.setSelectedItem(repairedGenre);
+        } else {
+            if (!rawArtist.isEmpty()) {
+                artistField.setText(repairedArtist);
+            }
+            if (!rawAlbum.isEmpty()) {
+                albumField.setText(repairedAlbum);
+            }
+            if (!rawGenre.isEmpty()) {
+                genreCombo.setSelectedItem(repairedGenre);
+            }
+        }
+    }
+
     private JPanel createDetailsPanel() {
         I18nManager i18n = I18nManager.getInstance();
         JPanel panel = new JPanel(new GridBagLayout());
@@ -180,9 +299,33 @@ public class TagEditorDialog extends JDialog {
 
         Track firstTrack = isSingleMode ? tracks.getFirst() : null;
 
-        // 1. Title
+        // 0. Character Encoding Selector & Preview
         gbc.gridx = 0;
         gbc.gridy = 0;
+        gbc.weightx = 0.0;
+        panel.add(new JLabel(i18n.get("encoding.label")), gbc);
+
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        encodingCombo = new JComboBox<>(new EncodingItem[]{
+                new EncodingItem(EncodingMode.RAW, i18n.get("encoding.raw")),
+                new EncodingItem(EncodingMode.AUTO, i18n.get("encoding.auto")),
+                new EncodingItem(EncodingMode.SJIS, i18n.get("encoding.sjis")),
+                new EncodingItem(EncodingMode.UTF8, i18n.get("encoding.utf8")),
+                new EncodingItem(EncodingMode.EUCJP, i18n.get("encoding.eucjp"))
+        });
+        encodingCombo.addActionListener(e -> applyEncodingPreview());
+
+        JPanel encPanel = new JPanel(new BorderLayout(6, 0));
+        encPanel.add(encodingCombo, BorderLayout.CENTER);
+        JButton repairButton = new JButton(i18n.get("tageditor.btn.repair_encoding"));
+        repairButton.addActionListener(e -> applyEncodingPreview());
+        encPanel.add(repairButton, BorderLayout.EAST);
+        panel.add(encPanel, gbc);
+
+        // 1. Title
+        gbc.gridx = 0;
+        gbc.gridy = 1;
         gbc.weightx = 0.0;
         panel.add(new JLabel(i18n.get("tageditor.field.title")), gbc);
 
@@ -199,7 +342,7 @@ public class TagEditorDialog extends JDialog {
 
         // 2. Artist
         gbc.gridx = 0;
-        gbc.gridy = 1;
+        gbc.gridy = 2;
         gbc.weightx = 0.0;
         panel.add(new JLabel(i18n.get("tageditor.field.artist")), gbc);
 
@@ -215,7 +358,7 @@ public class TagEditorDialog extends JDialog {
 
         // 3. Album
         gbc.gridx = 0;
-        gbc.gridy = 2;
+        gbc.gridy = 3;
         gbc.weightx = 0.0;
         panel.add(new JLabel(i18n.get("tageditor.field.album")), gbc);
 
@@ -231,7 +374,7 @@ public class TagEditorDialog extends JDialog {
 
         // 4. Genre
         gbc.gridx = 0;
-        gbc.gridy = 3;
+        gbc.gridy = 4;
         gbc.weightx = 0.0;
         panel.add(new JLabel(i18n.get("tageditor.field.genre")), gbc);
 
@@ -283,7 +426,7 @@ public class TagEditorDialog extends JDialog {
 
         // 5. Year
         gbc.gridx = 0;
-        gbc.gridy = 4;
+        gbc.gridy = 5;
         gbc.weightx = 0.0;
         panel.add(new JLabel(i18n.get("tageditor.field.year")), gbc);
 
@@ -300,7 +443,7 @@ public class TagEditorDialog extends JDialog {
 
         // 6. Track Number
         gbc.gridx = 0;
-        gbc.gridy = 5;
+        gbc.gridy = 6;
         gbc.weightx = 0.0;
         panel.add(new JLabel(i18n.get("tageditor.field.track_number")), gbc);
 
@@ -317,7 +460,7 @@ public class TagEditorDialog extends JDialog {
         // 7. Single Mode: Read-only File Information Section
         if (isSingleMode && firstTrack != null) {
             gbc.gridx = 0;
-            gbc.gridy = 6;
+            gbc.gridy = 7;
             gbc.gridwidth = 2;
             gbc.insets = new Insets(16, 6, 4, 6);
             JLabel sectionLabel = new JLabel("— " + i18n.get("tageditor.field.file_path") + " —");
@@ -326,12 +469,12 @@ public class TagEditorDialog extends JDialog {
             panel.add(sectionLabel, gbc);
 
             gbc.insets = new Insets(4, 6, 4, 6);
-            gbc.gridy = 7;
+            gbc.gridy = 8;
             JLabel pathLabel = new JLabel(firstTrack.getFilePath());
             pathLabel.setFont(pathLabel.getFont().deriveFont(11f));
             panel.add(pathLabel, gbc);
 
-            gbc.gridy = 8;
+            gbc.gridy = 9;
             String fileInfo = i18n.get("tageditor.field.duration") + " " + TimeFormatter.format(firstTrack.getDurationSeconds())
                     + "   |   " + i18n.get("tageditor.field.file_size") + " " + FormatUtils.formatFileSize(firstTrack.getFileSizeBytes());
             JLabel infoLabel = new JLabel(fileInfo);
@@ -342,7 +485,7 @@ public class TagEditorDialog extends JDialog {
 
         // Fill remaining vertical space
         gbc.gridx = 0;
-        gbc.gridy = 9;
+        gbc.gridy = 10;
         gbc.gridwidth = 2;
         gbc.weighty = 1.0;
         panel.add(Box.createGlue(), gbc);
@@ -575,6 +718,7 @@ public class TagEditorDialog extends JDialog {
     }
 
     // Accessors for unit testing
+    public JComboBox<EncodingItem> getEncodingCombo() { return encodingCombo; }
     public JTextField getTitleField() { return titleField; }
     public JTextField getArtistField() { return artistField; }
     public JTextField getAlbumField() { return albumField; }

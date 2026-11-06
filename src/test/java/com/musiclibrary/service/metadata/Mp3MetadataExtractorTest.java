@@ -461,6 +461,41 @@ class Mp3MetadataExtractorTest {
         assertThat(track.getBitrate()).isGreaterThan(0);
     }
 
+    @Test
+    @DisplayName("extract automatically repairs Shift-JIS mojibake in ID3v2 tags when autoRepair is enabled")
+    void testExtractAutoRepairsMojibakeTags() throws Exception {
+        String origTitle = "春の歌";
+        String origArtist = "スピッツ";
+        String origAlbum = "ハチミツ";
+        String origGenre = "ロック";
+
+        byte[] titleBytes = origTitle.getBytes(java.nio.charset.Charset.forName("Windows-31J"));
+        byte[] artistBytes = origArtist.getBytes(java.nio.charset.Charset.forName("Windows-31J"));
+        byte[] albumBytes = origAlbum.getBytes(java.nio.charset.Charset.forName("Windows-31J"));
+        byte[] genreBytes = origGenre.getBytes(java.nio.charset.Charset.forName("Windows-31J"));
+
+        String mbTitle = new String(titleBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+        String mbArtist = new String(artistBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+        String mbAlbum = new String(albumBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+        String mbGenre = new String(genreBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+
+        byte[] mp3Bytes = createMinimalValidMp3WithId3v2(
+                mbTitle, mbArtist, mbAlbum, mbGenre, "1995", "1/10", null
+        );
+
+        Path mp3File = tempDir.resolve("sjis_mojibake.mp3");
+        Files.write(mp3File, mp3Bytes);
+
+        Mp3MetadataExtractor extractor = new Mp3MetadataExtractor();
+        Track track = extractor.extract(mp3File);
+
+        assertThat(track).isNotNull();
+        assertThat(track.getTitle()).isEqualTo("春の歌");
+        assertThat(track.getArtist()).isEqualTo("スピッツ");
+        assertThat(track.getAlbum()).isEqualTo("ハチミツ");
+        assertThat(track.getGenre()).isEqualTo("ロック");
+    }
+
     // --- Helper for creating minimal valid MP3 with ID3v2.4 and MPEG audio frame ---
 
     private static byte[] createMinimalValidMp3WithId3v2(

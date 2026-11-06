@@ -3,6 +3,7 @@ package com.musiclibrary.ui.panel;
 import com.musiclibrary.i18n.I18nManager;
 import com.musiclibrary.model.PlaybackState;
 import com.musiclibrary.model.Track;
+import com.musiclibrary.service.encoding.EncodingRepairService;
 import com.musiclibrary.ui.dnd.TrackTransferData;
 import com.musiclibrary.settings.UserPreferences;
 import com.musiclibrary.ui.table.PlaybackStatusIcon;
@@ -14,6 +15,7 @@ import javax.swing.BorderFactory;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -51,6 +53,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.nio.charset.Charset;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -61,6 +64,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -102,6 +106,11 @@ public class TrackTablePanel extends JPanel {
     private final JMenuItem playNextMenuItem;
     private final JMenuItem getInfoMenuItem;
     private final JMenuItem editTagsMenuItem;
+    private final JMenu fixEncodingMenu;
+    private final JMenuItem fixAutoMenuItem;
+    private final JMenuItem fixSjisMenuItem;
+    private final JMenuItem fixUtf8MenuItem;
+    private final JMenuItem fixEucJpMenuItem;
     private final JMenuItem openFolderMenuItem;
     private final JMenuItem deleteMenuItem;
 
@@ -110,6 +119,7 @@ public class TrackTablePanel extends JPanel {
     private Consumer<Track> onPlayNextAction;
     private Consumer<Track> onGetInfoAction;
     private Consumer<List<Track>> onEditTagsAction;
+    private BiConsumer<List<Track>, Charset> onRepairEncodingAction;
     private Consumer<Track> onOpenFolderAction;
     private Consumer<Track> onDeleteAction;
     private Consumer<List<Track>> onDeleteTracksAction;
@@ -250,6 +260,11 @@ public class TrackTablePanel extends JPanel {
         playNextMenuItem = new JMenuItem();
         getInfoMenuItem = new JMenuItem();
         editTagsMenuItem = new JMenuItem();
+        fixEncodingMenu = new JMenu();
+        fixAutoMenuItem = new JMenuItem();
+        fixSjisMenuItem = new JMenuItem();
+        fixUtf8MenuItem = new JMenuItem();
+        fixEucJpMenuItem = new JMenuItem();
         openFolderMenuItem = new JMenuItem();
         deleteMenuItem = new JMenuItem();
 
@@ -733,6 +748,16 @@ public class TrackTablePanel extends JPanel {
 
         editTagsMenuItem.addActionListener(e -> triggerEditTagsAction());
 
+        fixAutoMenuItem.addActionListener(e -> triggerRepairEncoding(null));
+        fixSjisMenuItem.addActionListener(e -> triggerRepairEncoding(EncodingRepairService.CHARSET_CP932));
+        fixUtf8MenuItem.addActionListener(e -> triggerRepairEncoding(EncodingRepairService.CHARSET_UTF8));
+        fixEucJpMenuItem.addActionListener(e -> triggerRepairEncoding(EncodingRepairService.CHARSET_EUCJP));
+
+        fixEncodingMenu.add(fixAutoMenuItem);
+        fixEncodingMenu.add(fixSjisMenuItem);
+        fixEncodingMenu.add(fixUtf8MenuItem);
+        fixEncodingMenu.add(fixEucJpMenuItem);
+
         openFolderMenuItem.addActionListener(e -> triggerOpenFolderAction());
 
         deleteMenuItem.addActionListener(e -> triggerDeleteAction());
@@ -742,6 +767,7 @@ public class TrackTablePanel extends JPanel {
         contextMenu.addSeparator();
         contextMenu.add(getInfoMenuItem);
         contextMenu.add(editTagsMenuItem);
+        contextMenu.add(fixEncodingMenu);
         contextMenu.add(openFolderMenuItem);
         contextMenu.addSeparator();
         contextMenu.add(deleteMenuItem);
@@ -838,6 +864,24 @@ public class TrackTablePanel extends JPanel {
         List<Track> selected = getSelectedTracks();
         if (!selected.isEmpty() && onEditTagsAction != null) {
             onEditTagsAction.accept(selected);
+        }
+    }
+
+    /**
+     * Triggers character encoding repair for the currently selected track(s).
+     *
+     * @param charset target charset to repair with, or null for auto detection
+     */
+    public void triggerRepairEncoding(Charset charset) {
+        List<Track> selected = getSelectedTracks();
+        if (selected.isEmpty()) {
+            Track single = getSelectedTrack();
+            if (single != null) {
+                selected = List.of(single);
+            }
+        }
+        if (!selected.isEmpty() && onRepairEncodingAction != null) {
+            onRepairEncodingAction.accept(selected, charset);
         }
     }
 
@@ -975,6 +1019,11 @@ public class TrackTablePanel extends JPanel {
         playNextMenuItem.setText(i18n.get("table.menu.play_next"));
         getInfoMenuItem.setText(i18n.get("table.menu.get_info"));
         editTagsMenuItem.setText(i18n.get("table.menu.edit_tags"));
+        fixEncodingMenu.setText(i18n.get("menu.track.fix_encoding"));
+        fixAutoMenuItem.setText(i18n.get("menu.track.fix_encoding.auto"));
+        fixSjisMenuItem.setText(i18n.get("menu.track.fix_encoding.sjis"));
+        fixUtf8MenuItem.setText(i18n.get("menu.track.fix_encoding.utf8"));
+        fixEucJpMenuItem.setText(i18n.get("menu.track.fix_encoding.eucjp"));
         openFolderMenuItem.setText(i18n.get("table.menu.open_folder"));
         deleteMenuItem.setText(i18n.get(isPlaylistContext ? "table.menu.delete_from_playlist" : "table.menu.delete"));
     }
@@ -1156,6 +1205,30 @@ public class TrackTablePanel extends JPanel {
 
     public void setOnEditTagsAction(Consumer<List<Track>> onEditTagsAction) {
         this.onEditTagsAction = onEditTagsAction;
+    }
+
+    public void setOnRepairEncodingAction(BiConsumer<List<Track>, Charset> onRepairEncodingAction) {
+        this.onRepairEncodingAction = onRepairEncodingAction;
+    }
+
+    public JMenu getFixEncodingMenu() {
+        return fixEncodingMenu;
+    }
+
+    public JMenuItem getFixAutoMenuItem() {
+        return fixAutoMenuItem;
+    }
+
+    public JMenuItem getFixSjisMenuItem() {
+        return fixSjisMenuItem;
+    }
+
+    public JMenuItem getFixUtf8MenuItem() {
+        return fixUtf8MenuItem;
+    }
+
+    public JMenuItem getFixEucJpMenuItem() {
+        return fixEucJpMenuItem;
     }
 
     public void setOnOpenFolderAction(Consumer<Track> onOpenFolderAction) {

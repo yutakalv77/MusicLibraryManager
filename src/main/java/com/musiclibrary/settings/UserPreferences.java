@@ -25,6 +25,9 @@ public class UserPreferences {
     // Artwork Source Priority setting
     private String artworkPriority = "EMBEDDED_FIRST";
 
+    // Metadata Encoding Repair settings
+    private boolean autoRepairEncoding = true;
+
     // Playback settings
     private int volumePercent = 80;
 
@@ -150,6 +153,14 @@ public class UserPreferences {
 
     public void setArtworkPriority(String artworkPriority) {
         this.artworkPriority = (artworkPriority != null && !artworkPriority.isBlank()) ? artworkPriority : "EMBEDDED_FIRST";
+    }
+
+    public boolean isAutoRepairEncoding() {
+        return autoRepairEncoding;
+    }
+
+    public void setAutoRepairEncoding(boolean autoRepairEncoding) {
+        this.autoRepairEncoding = autoRepairEncoding;
     }
 
     public int getVolumePercent() {

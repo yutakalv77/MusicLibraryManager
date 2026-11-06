@@ -72,6 +72,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -280,6 +281,7 @@ public class MainFrame extends JFrame {
         this.trackTablePanel.setOnPlayAction(this::playTrackSafely);
         this.trackTablePanel.setOnPlayNextAction(this::enqueueNextSafely);
         this.trackTablePanel.setOnEditTagsAction(this::openTagEditorForTracks);
+        this.trackTablePanel.setOnRepairEncodingAction(this::repairTracksEncoding);
 
         this.audioPlayer.addPlayerListener(new PlayerListener() {
             @Override
@@ -758,6 +760,42 @@ public class MainFrame extends JFrame {
             );
         });
         dialog.setVisible(true);
+    }
+
+    /**
+     * Repairs character encoding for the specified tracks using either auto-repair or target charset.
+     *
+     * @param tracks        tracks to repair
+     * @param targetCharset target charset or null for auto detection
+     */
+    public void repairTracksEncoding(List<Track> tracks, Charset targetCharset) {
+        if (tracks == null || tracks.isEmpty()) {
+            return;
+        }
+
+        I18nManager i18n = I18nManager.getInstance();
+        statusBarPanel.setStatus(i18n.get("status.encoding_repairing"));
+
+        libraryController.repairTracksEncoding(
+                tracks,
+                targetCharset,
+                () -> {
+                    statusBarPanel.setStatus(i18n.format("status.encoding_repaired", tracks.size()));
+                    updateStatusBarSummary();
+                },
+                error -> {
+                    statusBarPanel.setStatus(i18n.get("tageditor.status.error_concise"));
+                    String message = (error != null && error.getMessage() != null && !error.getMessage().isBlank())
+                            ? error.getMessage()
+                            : (error != null ? error.toString() : "");
+                    JOptionPane.showMessageDialog(
+                            MainFrame.this,
+                            i18n.format("tageditor.dialog.error_message", message),
+                            i18n.get("tageditor.dialog.error_title"),
+                            JOptionPane.ERROR_MESSAGE
+                    );
+                }
+        );
     }
 
     /**

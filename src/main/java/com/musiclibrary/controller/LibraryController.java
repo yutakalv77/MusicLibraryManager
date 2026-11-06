@@ -9,6 +9,7 @@ import com.musiclibrary.model.Track;
 import com.musiclibrary.model.TrackMetadataUpdate;
 import com.musiclibrary.service.audio.AudioPlayer;
 import com.musiclibrary.service.cache.ArtworkCache;
+import com.musiclibrary.service.encoding.EncodingRepairService;
 import com.musiclibrary.service.metadata.Mp3TagWriter;
 import com.musiclibrary.service.metadata.TagWriter;
 import com.musiclibrary.service.search.FastSearchIndex;
@@ -17,6 +18,7 @@ import com.musiclibrary.service.storage.MissingTrackResolver;
 import com.musiclibrary.ui.panel.SidebarPanel;
 import com.musiclibrary.ui.panel.TrackTablePanel;
 import static com.musiclibrary.util.SwingUtils.runOnEdt;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -670,6 +672,114 @@ public class LibraryController {
                     update.applyTo(track);
                     if (update.isUpdateArtwork()) {
                         ArtworkCache.getInstance().evict(track.getId());
+                    }
+                }
+
+                runOnEdt(() -> {
+                    if (searchIndex != null) {
+                        searchIndex.indexTracks(library.getTracks());
+                    }
+                    notifyLibraryContentChanged();
+                    refreshCurrentView();
+                    if (onCompleted != null) {
+                        onCompleted.run();
+                    }
+                });
+
+                saveLibraryAsync();
+            } catch (Throwable t) {
+                runOnEdt(() -> {
+                    if (onError != null) {
+                        onError.accept(t);
+                    }
+                });
+            }
+        });
+    }
+
+    /**
+     * Asynchronously repairs character encoding for multiple tracks' audio files and synchronizes library state.
+     *
+     * @param tracks        collection of tracks to repair
+     * @param targetCharset target charset to re-interpret metadata bytes with, or null for auto repair
+     * @param onCompleted   optional completion callback invoked on EDT
+     * @param onError       optional error callback invoked on EDT
+     */
+    public void repairTracksEncoding(List<Track> tracks,
+                                     Charset targetCharset,
+                                     Runnable onCompleted,
+                                     Consumer<Throwable> onError) {
+        if (tracks == null || tracks.isEmpty()) {
+            if (onCompleted != null) {
+                runOnEdt(onCompleted);
+            }
+            return;
+        }
+
+        tagExecutor.submit(() -> {
+            try {
+                EncodingRepairService repairService = EncodingRepairService.getInstance();
+                int updatedCount = 0;
+
+                for (Track track : tracks) {
+                    if (track == null) {
+                        continue;
+                    }
+
+                    String origTitle = track.getTitle();
+                    String origArtist = track.getArtist();
+                    String origAlbumArtist = track.getAlbumArtist();
+                    String origAlbum = track.getAlbum();
+                    String origGenre = track.getGenre();
+
+                    String newTitle = (targetCharset != null)
+                            ? repairService.repair(origTitle, targetCharset)
+                            : repairService.autoRepair(origTitle);
+                    String newArtist = (targetCharset != null)
+                            ? repairService.repair(origArtist, targetCharset)
+                            : repairService.autoRepair(origArtist);
+                    String newAlbumArtist = (targetCharset != null)
+                            ? repairService.repair(origAlbumArtist, targetCharset)
+                            : repairService.autoRepair(origAlbumArtist);
+                    String newAlbum = (targetCharset != null)
+                            ? repairService.repair(origAlbum, targetCharset)
+                            : repairService.autoRepair(origAlbum);
+                    String newGenre = (targetCharset != null)
+                            ? repairService.repair(origGenre, targetCharset)
+                            : repairService.autoRepair(origGenre);
+
+                    boolean changed = !Objects.equals(origTitle, newTitle)
+                            || !Objects.equals(origArtist, newArtist)
+                            || !Objects.equals(origAlbumArtist, newAlbumArtist)
+                            || !Objects.equals(origAlbum, newAlbum)
+                            || !Objects.equals(origGenre, newGenre);
+
+                    if (changed) {
+                        TrackMetadataUpdate update = TrackMetadataUpdate.builder()
+                                .title(newTitle)
+                                .artist(newArtist)
+                                .album(newAlbum)
+                                .genre(newGenre)
+                                .build();
+
+                        if (track.getFilePath() != null && !track.getFilePath().isBlank()) {
+                            Path p = Path.of(track.getFilePath());
+                            if (Files.exists(p) && tagWriter != null && tagWriter.supports(p)) {
+                                tagWriter.write(p, update);
+                                try {
+                                    track.setFileSizeBytes(Files.size(p));
+                                    track.setLastModified(Files.getLastModifiedTime(p).toInstant());
+                                } catch (Exception ignored) {
+                                }
+                            }
+                        }
+
+                        track.setTitle(newTitle);
+                        track.setArtist(newArtist);
+                        track.setAlbumArtist(newAlbumArtist);
+                        track.setAlbum(newAlbum);
+                        track.setGenre(newGenre);
+                        updatedCount++;
                     }
                 }
 

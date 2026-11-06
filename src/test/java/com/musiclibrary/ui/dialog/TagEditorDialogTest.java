@@ -642,4 +642,154 @@ class TagEditorDialogTest {
             }
         }
     }
+
+    @Test
+    @DisplayName("Encoding combo box is present, populated, and layout-rendered in real UI")
+    void testEncodingComboBoxLayoutAndRendering() {
+        Track track = createTrack("t1", "Title", "Artist", "Album", "Rock", 2020, 1);
+        TagEditorDialog dialog = new TagEditorDialog(null, List.of(track), null);
+
+        try {
+            dialog.setSize(600, 550);
+            dialog.doLayout();
+
+            assertThat(dialog.getEncodingCombo()).isNotNull();
+            assertThat(dialog.getEncodingCombo().getItemCount()).isEqualTo(5);
+
+            // Verify mode order: RAW, AUTO, SJIS, UTF8, EUCJP
+            assertThat(dialog.getEncodingCombo().getItemAt(0).getMode()).isEqualTo(TagEditorDialog.EncodingMode.RAW);
+            assertThat(dialog.getEncodingCombo().getItemAt(1).getMode()).isEqualTo(TagEditorDialog.EncodingMode.AUTO);
+            assertThat(dialog.getEncodingCombo().getItemAt(2).getMode()).isEqualTo(TagEditorDialog.EncodingMode.SJIS);
+            assertThat(dialog.getEncodingCombo().getItemAt(3).getMode()).isEqualTo(TagEditorDialog.EncodingMode.UTF8);
+            assertThat(dialog.getEncodingCombo().getItemAt(4).getMode()).isEqualTo(TagEditorDialog.EncodingMode.EUCJP);
+        } finally {
+            dialog.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("Single track encoding preview restores Shift-JIS mojibake in real time and can revert to raw")
+    void testSingleTrackEncodingPreviewShiftJisAndRevert() {
+        String origTitle = "夜に駆ける";
+        String origArtist = "音楽隊";
+        String origAlbum = "ベストアルバム";
+        String origGenre = "ロック";
+
+        byte[] titleBytes = origTitle.getBytes(java.nio.charset.Charset.forName("Windows-31J"));
+        byte[] artistBytes = origArtist.getBytes(java.nio.charset.Charset.forName("Windows-31J"));
+        byte[] albumBytes = origAlbum.getBytes(java.nio.charset.Charset.forName("Windows-31J"));
+        byte[] genreBytes = origGenre.getBytes(java.nio.charset.Charset.forName("Windows-31J"));
+
+        String mbTitle = new String(titleBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+        String mbArtist = new String(artistBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+        String mbAlbum = new String(albumBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+        String mbGenre = new String(genreBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+
+        Track track = createTrack("t1", mbTitle, mbArtist, mbAlbum, mbGenre, 2021, 1);
+        TagEditorDialog dialog = new TagEditorDialog(null, List.of(track), null);
+
+        try {
+            dialog.setSize(600, 550);
+            dialog.doLayout();
+
+            // Initial fields have raw mojibake
+            assertThat(dialog.getTitleField().getText()).isEqualTo(mbTitle);
+            assertThat(dialog.getArtistField().getText()).isEqualTo(mbArtist);
+            assertThat(dialog.getAlbumField().getText()).isEqualTo(mbAlbum);
+
+            // Select Shift-JIS (index 2)
+            dialog.getEncodingCombo().setSelectedIndex(2);
+
+            // Real-time preview should now show correctly decoded Japanese text
+            assertThat(dialog.getTitleField().getText()).isEqualTo(origTitle);
+            assertThat(dialog.getArtistField().getText()).isEqualTo(origArtist);
+            assertThat(dialog.getAlbumField().getText()).isEqualTo(origAlbum);
+            assertThat(dialog.getGenreCombo().getSelectedItem()).isEqualTo(origGenre);
+
+            // Switch back to RAW (index 0)
+            dialog.getEncodingCombo().setSelectedIndex(0);
+
+            assertThat(dialog.getTitleField().getText()).isEqualTo(mbTitle);
+            assertThat(dialog.getArtistField().getText()).isEqualTo(mbArtist);
+            assertThat(dialog.getAlbumField().getText()).isEqualTo(mbAlbum);
+            assertThat(dialog.getGenreCombo().getSelectedItem()).isEqualTo(mbGenre);
+
+            // Switch to AUTO (index 1)
+            dialog.getEncodingCombo().setSelectedIndex(1);
+
+            assertThat(dialog.getTitleField().getText()).isEqualTo(origTitle);
+            assertThat(dialog.getArtistField().getText()).isEqualTo(origArtist);
+            assertThat(dialog.getAlbumField().getText()).isEqualTo(origAlbum);
+        } finally {
+            dialog.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("Multi-track encoding preview updates common fields and saves repaired metadata")
+    void testMultiTrackEncodingPreviewAndSave() {
+        String origArtist = "スピッツ";
+        String origAlbum = "ハチミツ";
+        String origGenre = "ポップス";
+
+        byte[] artistBytes = origArtist.getBytes(java.nio.charset.Charset.forName("Windows-31J"));
+        byte[] albumBytes = origAlbum.getBytes(java.nio.charset.Charset.forName("Windows-31J"));
+        byte[] genreBytes = origGenre.getBytes(java.nio.charset.Charset.forName("Windows-31J"));
+
+        String mbArtist = new String(artistBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+        String mbAlbum = new String(albumBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+        String mbGenre = new String(genreBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+
+        Track track1 = createTrack("t1", "Track 1", mbArtist, mbAlbum, mbGenre, 1995, 1);
+        Track track2 = createTrack("t2", "Track 2", mbArtist, mbAlbum, mbGenre, 1995, 2);
+
+        AtomicReference<TrackMetadataUpdate> savedUpdate = new AtomicReference<>();
+        TagEditorDialog dialog = new TagEditorDialog(null, List.of(track1, track2), null, savedUpdate::set);
+
+        try {
+            dialog.setSize(600, 550);
+            dialog.doLayout();
+
+            // Select Shift-JIS
+            dialog.getEncodingCombo().setSelectedIndex(2);
+
+            assertThat(dialog.getArtistField().getText()).isEqualTo(origArtist);
+            assertThat(dialog.getAlbumField().getText()).isEqualTo(origAlbum);
+            assertThat(dialog.getGenreCombo().getSelectedItem()).isEqualTo(origGenre);
+
+            // Click save button
+            dialog.getSaveButton().doClick();
+
+            assertThat(dialog.isSaved()).isTrue();
+            assertThat(savedUpdate.get()).isNotNull();
+            assertThat(savedUpdate.get().getArtist()).isEqualTo(origArtist);
+            assertThat(savedUpdate.get().getAlbum()).isEqualTo(origAlbum);
+            assertThat(savedUpdate.get().getGenre()).isEqualTo(origGenre);
+        } finally {
+            dialog.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("UTF-8 encoding preview correctly restores UTF-8 mojibake")
+    void testEncodingPreviewUtf8() {
+        String origTitle = "鬼滅の刃 サントラ";
+        byte[] titleBytes = origTitle.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String mbTitle = new String(titleBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+
+        Track track = createTrack("t1", mbTitle, "Artist", "Album", "Anime", 2020, 1);
+        TagEditorDialog dialog = new TagEditorDialog(null, List.of(track), null);
+
+        try {
+            dialog.setSize(600, 550);
+            dialog.doLayout();
+
+            // Select UTF-8 (index 3)
+            dialog.getEncodingCombo().setSelectedIndex(3);
+
+            assertThat(dialog.getTitleField().getText()).isEqualTo(origTitle);
+        } finally {
+            dialog.dispose();
+        }
+    }
 }

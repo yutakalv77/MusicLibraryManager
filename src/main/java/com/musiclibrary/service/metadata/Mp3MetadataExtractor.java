@@ -7,6 +7,8 @@ import com.mpatric.mp3agic.ID3v2FrameSet;
 import com.mpatric.mp3agic.ID3v2TextFrameData;
 import com.mpatric.mp3agic.Mp3File;
 import com.musiclibrary.model.Track;
+import com.musiclibrary.service.encoding.EncodingRepairService;
+import com.musiclibrary.settings.SettingsManager;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -118,6 +120,21 @@ public class Mp3MetadataExtractor implements MetadataExtractor {
             // 3. Fallback: Fast estimation from audio data size and bitrate if duration is still 0
             if (durationSeconds <= 0) {
                 durationSeconds = estimateDurationFromBitrate(mp3File, fileSize);
+            }
+
+            // 4. Auto-repair mojibake encoding for Japanese/CJK text if enabled
+            boolean autoRepair = true;
+            try {
+                autoRepair = SettingsManager.getInstance().getPreferences().isAutoRepairEncoding();
+            } catch (Exception ignored) {
+            }
+            if (autoRepair) {
+                EncodingRepairService repairService = EncodingRepairService.getInstance();
+                title = repairService.autoRepair(title);
+                artist = repairService.autoRepair(artist);
+                albumArtist = repairService.autoRepair(albumArtist);
+                album = repairService.autoRepair(album);
+                genre = repairService.autoRepair(genre);
             }
         } catch (Exception e) {
             // Safe fallback: file is corrupt, 0-byte, or has invalid tags.

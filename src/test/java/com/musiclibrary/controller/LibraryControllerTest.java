@@ -6,6 +6,7 @@ import com.musiclibrary.model.Library;
 import com.musiclibrary.model.Playlist;
 import com.musiclibrary.model.Track;
 import com.musiclibrary.model.TrackMetadataUpdate;
+import com.musiclibrary.service.encoding.EncodingRepairService;
 import com.musiclibrary.service.metadata.TagWriter;
 import com.musiclibrary.service.search.FastSearchIndex;
 import com.musiclibrary.service.storage.LibraryStorage;
@@ -1153,6 +1154,161 @@ class LibraryControllerTest {
             assertThat(mockPlayer.isPlaying()).isTrue();
             assertThat(mockPlayer.getState()).isEqualTo(com.musiclibrary.model.PlaybackState.PLAYING);
             assertThat(mockPlayer.getCurrentPositionSeconds()).isEqualTo(33);
+        } finally {
+            customController.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("repairTracksEncoding updates track metadata with explicit charset, writes tags, reindexes and saves")
+    void testRepairTracksEncodingExplicitCharset() throws Exception {
+        testStorage.reset();
+        String origTitle = "夜に駆ける";
+        String origArtist = "音楽隊";
+        byte[] titleBytes = origTitle.getBytes(java.nio.charset.Charset.forName("Windows-31J"));
+        byte[] artistBytes = origArtist.getBytes(java.nio.charset.Charset.forName("Windows-31J"));
+        String mbTitle = new String(titleBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+        String mbArtist = new String(artistBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+
+        Path dummyFile = Files.createFile(tempDir.resolve("repair_track.mp3"));
+        Track testTrack = Track.builder()
+                .id("repair-track-1")
+                .filePath(dummyFile.toString())
+                .title(mbTitle)
+                .artist(mbArtist)
+                .album("Album")
+                .genre("Rock")
+                .build();
+        library.addTrack(testTrack);
+        searchIndex.indexTracks(library.getTracks());
+
+        AtomicBoolean tagWriterInvoked = new AtomicBoolean(false);
+        TagWriter mockWriter = new TagWriter() {
+            @Override
+            public void write(Path targetFile, TrackMetadataUpdate update) {
+                tagWriterInvoked.set(true);
+            }
+
+            @Override
+            public boolean supports(Path targetFile) {
+                return true;
+            }
+        };
+
+        LibraryController customController = new LibraryController(
+                library, sidebarPanel, trackTablePanel, testStorage, tempDir.resolve("lib.json"), searchIndex, null, mockWriter, null
+        );
+
+        try {
+            CountDownLatch latch = new CountDownLatch(1);
+            customController.repairTracksEncoding(
+                    List.of(testTrack),
+                    EncodingRepairService.CHARSET_CP932,
+                    latch::countDown,
+                    null
+            );
+
+            boolean completed = latch.await(10, TimeUnit.SECONDS);
+            assertThat(completed).isTrue();
+            assertThat(tagWriterInvoked.get()).isTrue();
+            assertThat(testTrack.getTitle()).isEqualTo("夜に駆ける");
+            assertThat(testTrack.getArtist()).isEqualTo("音楽隊");
+
+            // Search index should now find repaired text
+            assertThat(searchIndex.search("夜に駆ける")).contains("repair-track-1");
+            assertThat(testStorage.awaitSave(5000)).isTrue();
+        } finally {
+            customController.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("repairTracksEncoding with null charset automatically detects and repairs encoding")
+    void testRepairTracksEncodingAutoDetect() throws Exception {
+        testStorage.reset();
+        String origTitle = "春の歌";
+        byte[] titleBytes = origTitle.getBytes(java.nio.charset.Charset.forName("Windows-31J"));
+        String mbTitle = new String(titleBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+
+        Track testTrack = Track.builder()
+                .id("auto-repair-track")
+                .filePath("C:/music/spring.mp3")
+                .title(mbTitle)
+                .artist("Artist")
+                .album("Album")
+                .genre("Pop")
+                .build();
+        library.addTrack(testTrack);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        controller.repairTracksEncoding(
+                List.of(testTrack),
+                null,
+                latch::countDown,
+                null
+        );
+
+        boolean completed = latch.await(10, TimeUnit.SECONDS);
+        assertThat(completed).isTrue();
+        assertThat(testTrack.getTitle()).isEqualTo("春の歌");
+    }
+
+    @Test
+    @DisplayName("repairTracksEncoding handles null or empty track list safely")
+    void testRepairTracksEncodingNullOrEmpty() throws Exception {
+        CountDownLatch latch1 = new CountDownLatch(1);
+        controller.repairTracksEncoding(null, null, latch1::countDown, null);
+        assertThat(latch1.await(5, TimeUnit.SECONDS)).isTrue();
+
+        CountDownLatch latch2 = new CountDownLatch(1);
+        controller.repairTracksEncoding(List.of(), EncodingRepairService.CHARSET_CP932, latch2::countDown, null);
+        assertThat(latch2.await(5, TimeUnit.SECONDS)).isTrue();
+    }
+
+    @Test
+    @DisplayName("repairTracksEncoding invokes onError callback when tag writing throws an exception")
+    void testRepairTracksEncodingErrorCallback() throws Exception {
+        Path dummyFile = Files.createFile(tempDir.resolve("repair_fail.mp3"));
+        String mbTitle = new String("音楽".getBytes(java.nio.charset.Charset.forName("Windows-31J")), java.nio.charset.StandardCharsets.ISO_8859_1);
+        Track testTrack = Track.builder()
+                .id("repair-fail-track")
+                .filePath(dummyFile.toString())
+                .title(mbTitle)
+                .build();
+
+        TagWriter failingWriter = new TagWriter() {
+            @Override
+            public void write(Path targetFile, TrackMetadataUpdate update) throws IOException {
+                throw new IOException("Simulated repair tag write failure");
+            }
+
+            @Override
+            public boolean supports(Path targetFile) {
+                return true;
+            }
+        };
+
+        LibraryController customController = new LibraryController(
+                library, sidebarPanel, trackTablePanel, testStorage, tempDir.resolve("lib.json"), searchIndex, null, failingWriter, null
+        );
+
+        try {
+            CountDownLatch latch = new CountDownLatch(1);
+            AtomicReference<Throwable> errorRef = new AtomicReference<>();
+            customController.repairTracksEncoding(
+                    List.of(testTrack),
+                    EncodingRepairService.CHARSET_CP932,
+                    null,
+                    err -> {
+                        errorRef.set(err);
+                        latch.countDown();
+                    }
+            );
+
+            boolean completed = latch.await(10, TimeUnit.SECONDS);
+            assertThat(completed).isTrue();
+            assertThat(errorRef.get()).isInstanceOf(IOException.class);
+            assertThat(errorRef.get().getMessage()).contains("Simulated repair tag write failure");
         } finally {
             customController.dispose();
         }
