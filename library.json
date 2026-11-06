@@ -1,0 +1,30 @@
+{
+  "tracks": {
+    "track-1": {
+      "id": "track-1",
+      "filePath": "tracks/track1.mp3",
+      "title": "Song 1",
+      "artist": "Artist 1",
+      "album": "Album 1",
+      "genre": "",
+      "year": 0,
+      "trackNumber": 0,
+      "durationSeconds": 0,
+      "fileSizeBytes": 0,
+      "rating": 0,
+      "playCount": 0,
+      "dateAdded": "2026-10-14T05:54:30.408000300Z",
+      "lastModified": "1970-01-01T00:00:00Z",
+      "hasArtwork": false
+    }
+  },
+  "playlists": [
+    {
+      "id": "a0c8e8b4-d8b5-4665-a6a9-6653cd6af7db",
+      "name": "Favorites",
+      "trackIds": [
+        "track-1"
+      ]
+    }
+  ]
+}

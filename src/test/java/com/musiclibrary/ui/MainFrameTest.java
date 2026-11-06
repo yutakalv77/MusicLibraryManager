@@ -10,6 +10,9 @@ import com.musiclibrary.model.RepeatMode;
 import com.musiclibrary.model.Track;
 import com.musiclibrary.service.audio.AudioPlayer;
 import com.musiclibrary.service.audio.PlayerListener;
+import com.musiclibrary.service.cache.ArtworkCache;
+import com.musiclibrary.service.cache.ArtworkPriority;
+import com.musiclibrary.settings.SettingsManager;
 import com.musiclibrary.theme.AppTheme;
 import com.musiclibrary.theme.ThemeManager;
 import com.musiclibrary.ui.panel.ControlBarPanel;
@@ -17,6 +20,7 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import javax.swing.Action;
 import javax.swing.ActionMap;
@@ -34,6 +38,8 @@ import java.awt.GraphicsEnvironment;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import com.musiclibrary.ui.menu.AppMenuBar;
 
@@ -102,7 +108,9 @@ class MainFrameTest {
 
             JMenu viewMenu = menuBar.getMenu(2);
             assertThat(viewMenu.getText()).isEqualTo("View");
-            assertThat(viewMenu.getItemCount()).isEqualTo(4); // Theme sub, Lang sub, Sep, Mini Player
+            assertThat(viewMenu.getItemCount()).isEqualTo(5); // Theme sub, Lang sub, Artwork source sub, Sep, Mini Player
+            assertThat(frame.getArtworkSourceSubMenu()).isNotNull();
+            assertThat(frame.getArtworkSourceSubMenu().getItemCount()).isEqualTo(4);
 
             JMenu controlsMenu = menuBar.getMenu(3);
             assertThat(controlsMenu.getText()).isEqualTo("Controls");
@@ -914,8 +922,8 @@ class MainFrameTest {
         try {
             frame.setVisible(true);
 
-            // 1. Trigger via View Menu item (View menu index 2, item index 3 is miniPlayerItem)
-            JMenuItem miniPlayerMenuItem = frame.getJMenuBar().getMenu(2).getItem(3);
+            // 1. Trigger via View Menu item (Mini Player item)
+            JMenuItem miniPlayerMenuItem = frame.getAppMenuBar().getMiniPlayerItem();
             assertThat(miniPlayerMenuItem.getText()).isEqualTo("Mini Player");
             miniPlayerMenuItem.doClick();
             assertThat(frame.isVisible()).isFalse();
@@ -1487,6 +1495,114 @@ class MainFrameTest {
             assertThat(muteButton.getToolTipText()).isEqualTo("Mute");
         } finally {
             frame.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("Artwork priority can be switched via menu and updates ArtworkCache and preferences")
+    void testArtworkPriorityMenuInteractionAndPersistence() {
+        MainFrame frame = new MainFrame();
+
+        try {
+            // Initial default is EMBEDDED_FIRST
+            assertThat(frame.getEmbeddedFirstArtworkSourceItem().isSelected()).isTrue();
+            assertThat(ArtworkCache.getInstance().getPriority()).isEqualTo(ArtworkPriority.EMBEDDED_FIRST);
+
+            // Click FOLDER_FIRST menu item
+            frame.getFolderFirstArtworkSourceItem().doClick();
+            assertThat(ArtworkCache.getInstance().getPriority()).isEqualTo(ArtworkPriority.FOLDER_FIRST);
+            assertThat(frame.getFolderFirstArtworkSourceItem().isSelected()).isTrue();
+            assertThat(SettingsManager.getInstance().getPreferences().getArtworkPriority()).isEqualTo("FOLDER_FIRST");
+
+            // Click EMBEDDED_ONLY menu item
+            frame.getEmbeddedOnlyArtworkSourceItem().doClick();
+            assertThat(ArtworkCache.getInstance().getPriority()).isEqualTo(ArtworkPriority.EMBEDDED_ONLY);
+            assertThat(frame.getEmbeddedOnlyArtworkSourceItem().isSelected()).isTrue();
+            assertThat(SettingsManager.getInstance().getPreferences().getArtworkPriority()).isEqualTo("EMBEDDED_ONLY");
+
+            // Programmatic update via setArtworkPriority
+            frame.setArtworkPriority(ArtworkPriority.FOLDER_ONLY);
+            assertThat(ArtworkCache.getInstance().getPriority()).isEqualTo(ArtworkPriority.FOLDER_ONLY);
+            assertThat(frame.getFolderOnlyArtworkSourceItem().isSelected()).isTrue();
+
+            // Restore default
+            frame.setArtworkPriority(ArtworkPriority.EMBEDDED_FIRST);
+            assertThat(ArtworkCache.getInstance().getPriority()).isEqualTo(ArtworkPriority.EMBEDDED_FIRST);
+            assertThat(frame.getEmbeddedFirstArtworkSourceItem().isSelected()).isTrue();
+        } finally {
+            frame.dispose();
+        }
+    }
+
+    @Test
+    @DisplayName("Changing artwork priority refreshes visible UI displays and resolves matching source")
+    void testArtworkPriorityRefreshDisplaysIntegration(@TempDir Path tempDir) throws java.io.IOException {
+        Path albumFolder = tempDir.resolve("AlbumRefresh");
+        Files.createDirectories(albumFolder);
+        byte[] folderImg = createTestImageBytes(40, 40, java.awt.Color.BLUE);
+        Files.write(albumFolder.resolve("cover.jpg"), folderImg);
+        byte[] embeddedImg = createTestImageBytes(40, 40, java.awt.Color.RED);
+
+        Track track = Track.builder()
+                .id("art-refresh-track")
+                .title("Refresh Test Title")
+                .artist("Refresh Artist")
+                .album("Refresh Album")
+                .filePath(albumFolder.resolve("song.mp3").toString())
+                .artworkData(embeddedImg)
+                .build();
+
+        Library library = new Library();
+        library.addTrack(track);
+
+        TrackingAudioPlayer trackingPlayer = new TrackingAudioPlayer();
+        MainFrame frame = new MainFrame(library, null, trackingPlayer, null);
+        frame.setSize(1000, 700);
+        frame.doLayout();
+
+        try {
+            trackingPlayer.play(track);
+            frame.showAlbumGrid();
+
+            // Default EMBEDDED_FIRST -> embedded image (RED)
+            assertThat(ArtworkCache.getInstance().resolveArtworkData(track)).isEqualTo(embeddedImg);
+
+            // Switch to FOLDER_FIRST via menu -> folder image (BLUE)
+            frame.getFolderFirstArtworkSourceItem().doClick();
+            assertThat(ArtworkCache.getInstance().getPriority()).isEqualTo(ArtworkPriority.FOLDER_FIRST);
+            assertThat(ArtworkCache.getInstance().resolveArtworkData(track)).isEqualTo(folderImg);
+
+            // Switch to EMBEDDED_ONLY via menu -> embedded image (RED)
+            frame.getEmbeddedOnlyArtworkSourceItem().doClick();
+            assertThat(ArtworkCache.getInstance().getPriority()).isEqualTo(ArtworkPriority.EMBEDDED_ONLY);
+            assertThat(ArtworkCache.getInstance().resolveArtworkData(track)).isEqualTo(embeddedImg);
+
+            // Switch to FOLDER_ONLY via menu -> folder image (BLUE)
+            frame.getFolderOnlyArtworkSourceItem().doClick();
+            assertThat(ArtworkCache.getInstance().getPriority()).isEqualTo(ArtworkPriority.FOLDER_ONLY);
+            assertThat(ArtworkCache.getInstance().resolveArtworkData(track)).isEqualTo(folderImg);
+
+            // Restore default
+            frame.getEmbeddedFirstArtworkSourceItem().doClick();
+            assertThat(ArtworkCache.getInstance().getPriority()).isEqualTo(ArtworkPriority.EMBEDDED_FIRST);
+        } finally {
+            frame.dispose();
+            ArtworkCache.getInstance().setPriority(ArtworkPriority.EMBEDDED_FIRST);
+        }
+    }
+
+    private byte[] createTestImageBytes(int width, int height, java.awt.Color color) {
+        try {
+            java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(width, height, java.awt.image.BufferedImage.TYPE_INT_RGB);
+            java.awt.Graphics2D g2 = img.createGraphics();
+            g2.setColor(color);
+            g2.fillRect(0, 0, width, height);
+            g2.dispose();
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            javax.imageio.ImageIO.write(img, "png", baos);
+            return baos.toByteArray();
+        } catch (java.io.IOException e) {
+            throw new RuntimeException(e);
         }
     }
 

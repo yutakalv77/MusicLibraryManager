@@ -3,6 +3,8 @@ package com.musiclibrary.settings;
 import com.musiclibrary.i18n.AppLocale;
 import com.musiclibrary.i18n.I18nManager;
 import com.musiclibrary.model.Library;
+import com.musiclibrary.service.cache.ArtworkCache;
+import com.musiclibrary.service.cache.ArtworkPriority;
 import com.musiclibrary.theme.AppTheme;
 import com.musiclibrary.theme.ThemeManager;
 import com.musiclibrary.ui.MainFrame;
@@ -41,6 +43,7 @@ class SettingsManagerTest {
     void tearDown() {
         I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
         ThemeManager.getInstance().applyTheme(AppTheme.DARK);
+        ArtworkCache.getInstance().setPriority(ArtworkPriority.EMBEDDED_FIRST);
     }
 
     @Test
@@ -53,6 +56,7 @@ class SettingsManagerTest {
         assertThat(prefs.getVolumePercent()).isEqualTo(80);
         assertThat(prefs.getLanguage()).isEqualTo("SYSTEM");
         assertThat(prefs.getTheme()).isEqualTo("DARK");
+        assertThat(prefs.getArtworkPriority()).isEqualTo("EMBEDDED_FIRST");
     }
 
     @Test
@@ -66,6 +70,7 @@ class SettingsManagerTest {
         prefs.setWindowMaximized(true);
         prefs.setLanguage("JAPANESE");
         prefs.setTheme("LIGHT");
+        prefs.setArtworkPriority("FOLDER_FIRST");
         prefs.setVolumePercent(42);
 
         List<UserPreferences.ColumnConfig> customCols = List.of(
@@ -93,6 +98,7 @@ class SettingsManagerTest {
         assertThat(reloaded.isWindowMaximized()).isTrue();
         assertThat(reloaded.getLanguage()).isEqualTo("JAPANESE");
         assertThat(reloaded.getTheme()).isEqualTo("LIGHT");
+        assertThat(reloaded.getArtworkPriority()).isEqualTo("FOLDER_FIRST");
         assertThat(reloaded.getVolumePercent()).isEqualTo(42);
 
         assertThat(reloaded.getColumns()).hasSize(3);
@@ -494,5 +500,45 @@ class SettingsManagerTest {
         } finally {
             frame.dispose();
         }
+    }
+
+    @Test
+    @DisplayName("Artwork priority persists across all enum modes and falls back safely on invalid values")
+    void testArtworkPriorityPersistenceAllModesAndFallback() throws IOException {
+        for (ArtworkPriority priority : ArtworkPriority.values()) {
+            UserPreferences prefs = new UserPreferences();
+            prefs.setArtworkPriority(priority.name());
+            settingsManager.setPreferences(prefs);
+            settingsManager.save();
+
+            SettingsManager reloader = new SettingsManager(settingsPath);
+            reloader.load();
+            assertThat(reloader.getPreferences().getArtworkPriority()).isEqualTo(priority.name());
+        }
+
+        // Invalid priority string in JSON
+        Files.createDirectories(settingsPath.getParent());
+        Files.writeString(settingsPath, "{\"artworkPriority\": \"NON_EXISTENT_MODE\"}");
+        settingsManager.load();
+        // UserPreferences returns the value, but applyThemeAndLanguageEarly gracefully falls back to EMBEDDED_FIRST
+        assertThat(settingsManager.getPreferences().getArtworkPriority()).isEqualTo("NON_EXISTENT_MODE");
+        settingsManager.applyThemeAndLanguageEarly();
+        assertThat(ArtworkCache.getInstance().getPriority()).isEqualTo(ArtworkPriority.EMBEDDED_FIRST);
+    }
+
+    @Test
+    @DisplayName("applyThemeAndLanguageEarly applies configured artwork priority to ArtworkCache")
+    void testApplyThemeAndLanguageEarlySetsArtworkPriority() {
+        UserPreferences prefs = new UserPreferences();
+        prefs.setArtworkPriority("FOLDER_FIRST");
+        settingsManager.setPreferences(prefs);
+
+        settingsManager.applyThemeAndLanguageEarly();
+        assertThat(ArtworkCache.getInstance().getPriority()).isEqualTo(ArtworkPriority.FOLDER_FIRST);
+
+        prefs.setArtworkPriority("FOLDER_ONLY");
+        settingsManager.setPreferences(prefs);
+        settingsManager.applyThemeAndLanguageEarly();
+        assertThat(ArtworkCache.getInstance().getPriority()).isEqualTo(ArtworkPriority.FOLDER_ONLY);
     }
 }

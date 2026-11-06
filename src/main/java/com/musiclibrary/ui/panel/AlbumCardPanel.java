@@ -149,7 +149,7 @@ public class AlbumCardPanel extends JPanel {
 
     private void loadArtworkAsync() {
         Track repTrack = album.getRepresentativeTrack();
-        if (repTrack == null || !repTrack.hasArtwork()) {
+        if (repTrack == null) {
             return;
         }
 
@@ -167,7 +167,7 @@ public class AlbumCardPanel extends JPanel {
             }
             try {
                 Image image = ArtworkCache.getInstance().getImage(repTrack, ARTWORK_SIZE, ARTWORK_SIZE);
-                if (image != null && !disposed) {
+                if (image != null && !disposed && image != ArtworkCache.getInstance().getDefaultImage(ARTWORK_SIZE, ARTWORK_SIZE)) {
                     SwingUtilities.invokeLater(() -> {
                         if (!disposed) {
                             artworkLabel.setIcon(new ImageIcon(image));

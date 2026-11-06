@@ -3,6 +3,7 @@ package com.musiclibrary.ui.menu;
 import com.musiclibrary.i18n.AppLocale;
 import com.musiclibrary.i18n.I18nManager;
 import com.musiclibrary.model.RepeatMode;
+import com.musiclibrary.service.cache.ArtworkPriority;
 import com.musiclibrary.theme.AppTheme;
 import com.musiclibrary.theme.ThemeManager;
 
@@ -45,6 +46,11 @@ public class AppMenuBar extends JMenuBar {
     private final JRadioButtonMenuItem enLanguageItem;
     private final JRadioButtonMenuItem jaLanguageItem;
     private final JRadioButtonMenuItem systemLanguageItem;
+    private final JMenu artworkSourceSubMenu;
+    private final JRadioButtonMenuItem embeddedFirstArtworkSourceItem;
+    private final JRadioButtonMenuItem folderFirstArtworkSourceItem;
+    private final JRadioButtonMenuItem embeddedOnlyArtworkSourceItem;
+    private final JRadioButtonMenuItem folderOnlyArtworkSourceItem;
     private final JMenuItem miniPlayerItem;
 
     // Controls Menu
@@ -74,6 +80,7 @@ public class AppMenuBar extends JMenuBar {
     private Runnable onExitAction = () -> System.exit(0);
     private Runnable onEditTagsAction;
     private Runnable onMiniPlayerAction;
+    private Consumer<ArtworkPriority> onArtworkPriorityAction;
     private Runnable onPlayAction;
     private Runnable onPauseAction;
     private Runnable onNextAction;
@@ -178,6 +185,42 @@ public class AppMenuBar extends JMenuBar {
         languageSubMenu.add(jaLanguageItem);
         languageSubMenu.add(systemLanguageItem);
 
+        artworkSourceSubMenu = new JMenu();
+        ButtonGroup artworkSourceGroup = new ButtonGroup();
+        embeddedFirstArtworkSourceItem = new JRadioButtonMenuItem();
+        embeddedFirstArtworkSourceItem.addActionListener(e -> {
+            if (onArtworkPriorityAction != null) {
+                onArtworkPriorityAction.accept(ArtworkPriority.EMBEDDED_FIRST);
+            }
+        });
+        folderFirstArtworkSourceItem = new JRadioButtonMenuItem();
+        folderFirstArtworkSourceItem.addActionListener(e -> {
+            if (onArtworkPriorityAction != null) {
+                onArtworkPriorityAction.accept(ArtworkPriority.FOLDER_FIRST);
+            }
+        });
+        embeddedOnlyArtworkSourceItem = new JRadioButtonMenuItem();
+        embeddedOnlyArtworkSourceItem.addActionListener(e -> {
+            if (onArtworkPriorityAction != null) {
+                onArtworkPriorityAction.accept(ArtworkPriority.EMBEDDED_ONLY);
+            }
+        });
+        folderOnlyArtworkSourceItem = new JRadioButtonMenuItem();
+        folderOnlyArtworkSourceItem.addActionListener(e -> {
+            if (onArtworkPriorityAction != null) {
+                onArtworkPriorityAction.accept(ArtworkPriority.FOLDER_ONLY);
+            }
+        });
+
+        artworkSourceGroup.add(embeddedFirstArtworkSourceItem);
+        artworkSourceGroup.add(folderFirstArtworkSourceItem);
+        artworkSourceGroup.add(embeddedOnlyArtworkSourceItem);
+        artworkSourceGroup.add(folderOnlyArtworkSourceItem);
+        artworkSourceSubMenu.add(embeddedFirstArtworkSourceItem);
+        artworkSourceSubMenu.add(folderFirstArtworkSourceItem);
+        artworkSourceSubMenu.add(embeddedOnlyArtworkSourceItem);
+        artworkSourceSubMenu.add(folderOnlyArtworkSourceItem);
+
         miniPlayerItem = new JMenuItem();
         miniPlayerItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_M, KeyEvent.CTRL_DOWN_MASK));
         miniPlayerItem.addActionListener(e -> {
@@ -188,6 +231,7 @@ public class AppMenuBar extends JMenuBar {
 
         viewMenu.add(themeSubMenu);
         viewMenu.add(languageSubMenu);
+        viewMenu.add(artworkSourceSubMenu);
         viewMenu.addSeparator();
         viewMenu.add(miniPlayerItem);
         add(viewMenu);
@@ -286,6 +330,7 @@ public class AppMenuBar extends JMenuBar {
         updateLanguage();
         updateThemeSelection();
         updateLanguageSelection();
+        updateArtworkPrioritySelection(ArtworkPriority.EMBEDDED_FIRST);
         updateRepeatMode(RepeatMode.OFF);
     }
 
@@ -311,6 +356,11 @@ public class AppMenuBar extends JMenuBar {
         lightThemeItem.setText(i18n.get("menu.view.theme.light"));
         systemThemeItem.setText(i18n.get("menu.view.theme.system"));
         languageSubMenu.setText(i18n.get("menu.view.language"));
+        artworkSourceSubMenu.setText(i18n.get("menu.view.artwork_source"));
+        embeddedFirstArtworkSourceItem.setText(i18n.get("menu.view.artwork_source.embedded_first"));
+        folderFirstArtworkSourceItem.setText(i18n.get("menu.view.artwork_source.folder_first"));
+        embeddedOnlyArtworkSourceItem.setText(i18n.get("menu.view.artwork_source.embedded_only"));
+        folderOnlyArtworkSourceItem.setText(i18n.get("menu.view.artwork_source.folder_only"));
         miniPlayerItem.setText(i18n.get("menu.view.mini_player"));
 
         controlsMenu.setText(i18n.get("menu.controls"));
@@ -379,6 +429,23 @@ public class AppMenuBar extends JMenuBar {
     }
 
     /**
+     * Updates artwork source priority radio button selection.
+     *
+     * @param priority active artwork priority
+     */
+    public void updateArtworkPrioritySelection(ArtworkPriority priority) {
+        if (priority == null) {
+            priority = ArtworkPriority.EMBEDDED_FIRST;
+        }
+        switch (priority) {
+            case EMBEDDED_FIRST -> embeddedFirstArtworkSourceItem.setSelected(true);
+            case FOLDER_FIRST -> folderFirstArtworkSourceItem.setSelected(true);
+            case EMBEDDED_ONLY -> embeddedOnlyArtworkSourceItem.setSelected(true);
+            case FOLDER_ONLY -> folderOnlyArtworkSourceItem.setSelected(true);
+        }
+    }
+
+    /**
      * Updates repeat mode radio button selection.
      *
      * @param mode active repeat mode
@@ -430,6 +497,10 @@ public class AppMenuBar extends JMenuBar {
 
     public void setOnMiniPlayerAction(Runnable onMiniPlayerAction) {
         this.onMiniPlayerAction = onMiniPlayerAction;
+    }
+
+    public void setOnArtworkPriorityAction(Consumer<ArtworkPriority> onArtworkPriorityAction) {
+        this.onArtworkPriorityAction = onArtworkPriorityAction;
     }
 
     public void setOnPlayAction(Runnable onPlayAction) {
@@ -528,6 +599,26 @@ public class AppMenuBar extends JMenuBar {
 
     public JRadioButtonMenuItem getSystemLanguageItem() {
         return systemLanguageItem;
+    }
+
+    public JMenu getArtworkSourceSubMenu() {
+        return artworkSourceSubMenu;
+    }
+
+    public JRadioButtonMenuItem getEmbeddedFirstArtworkSourceItem() {
+        return embeddedFirstArtworkSourceItem;
+    }
+
+    public JRadioButtonMenuItem getFolderFirstArtworkSourceItem() {
+        return folderFirstArtworkSourceItem;
+    }
+
+    public JRadioButtonMenuItem getEmbeddedOnlyArtworkSourceItem() {
+        return embeddedOnlyArtworkSourceItem;
+    }
+
+    public JRadioButtonMenuItem getFolderOnlyArtworkSourceItem() {
+        return folderOnlyArtworkSourceItem;
     }
 
     public JMenuItem getMiniPlayerItem() {

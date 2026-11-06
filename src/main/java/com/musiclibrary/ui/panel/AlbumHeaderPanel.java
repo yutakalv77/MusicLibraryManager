@@ -255,7 +255,7 @@ public class AlbumHeaderPanel extends JPanel {
     private void loadArtworkAsync(Album album) {
         artworkLabel.setIcon(new ImageIcon(ArtworkCache.getInstance().getDefaultImage(THUMBNAIL_SIZE, THUMBNAIL_SIZE)));
         Track rep = album.getRepresentativeTrack();
-        if (rep == null || !rep.hasArtwork()) {
+        if (rep == null) {
             return;
         }
 
@@ -271,7 +271,7 @@ public class AlbumHeaderPanel extends JPanel {
                     // Check if currentAlbum hasn't changed during async loading
                     if (Objects.equals(currentAlbum, album)) {
                         Image img = get();
-                        if (img != null) {
+                        if (img != null && img != ArtworkCache.getInstance().getDefaultImage(THUMBNAIL_SIZE, THUMBNAIL_SIZE)) {
                             artworkLabel.setIcon(new ImageIcon(img));
                         }
                     }
@@ -285,7 +285,7 @@ public class AlbumHeaderPanel extends JPanel {
     private void loadArtistArtworkAsync(Artist artist) {
         artworkLabel.setIcon(new ImageIcon(ArtworkCache.getInstance().getDefaultImage(THUMBNAIL_SIZE, THUMBNAIL_SIZE)));
         Track rep = artist.getRepresentativeTrack();
-        if (rep == null || !rep.hasArtwork()) {
+        if (rep == null) {
             return;
         }
 
@@ -300,7 +300,7 @@ public class AlbumHeaderPanel extends JPanel {
                 try {
                     if (Objects.equals(currentArtist, artist)) {
                         Image img = get();
-                        if (img != null) {
+                        if (img != null && img != ArtworkCache.getInstance().getDefaultImage(THUMBNAIL_SIZE, THUMBNAIL_SIZE)) {
                             artworkLabel.setIcon(new ImageIcon(img));
                         }
                     }

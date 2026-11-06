@@ -4,6 +4,8 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.musiclibrary.i18n.AppLocale;
 import com.musiclibrary.i18n.I18nManager;
+import com.musiclibrary.service.cache.ArtworkCache;
+import com.musiclibrary.service.cache.ArtworkPriority;
 import com.musiclibrary.theme.AppTheme;
 import com.musiclibrary.theme.ThemeManager;
 import com.musiclibrary.ui.MainFrame;
@@ -150,6 +152,14 @@ public class SettingsManager {
         } catch (Exception e) {
             I18nManager.getInstance().setLocale(AppLocale.SYSTEM);
         }
+
+        // 3. Artwork Priority
+        try {
+            ArtworkPriority priority = ArtworkPriority.valueOf(prefs.getArtworkPriority());
+            ArtworkCache.getInstance().setPriority(priority);
+        } catch (Exception e) {
+            ArtworkCache.getInstance().setPriority(ArtworkPriority.EMBEDDED_FIRST);
+        }
     }
 
     /**
@@ -214,6 +224,20 @@ public class SettingsManager {
 
         // 4. Split Pane Right Pane Width
         frame.setRightPaneWidth(prefs.getRightPaneWidth());
+
+        // 5. Artwork Priority
+        try {
+            ArtworkPriority priority = ArtworkPriority.valueOf(prefs.getArtworkPriority());
+            ArtworkCache.getInstance().setPriority(priority);
+            if (frame.getAppMenuBar() != null) {
+                frame.getAppMenuBar().updateArtworkPrioritySelection(priority);
+            }
+        } catch (Exception e) {
+            ArtworkCache.getInstance().setPriority(ArtworkPriority.EMBEDDED_FIRST);
+            if (frame.getAppMenuBar() != null) {
+                frame.getAppMenuBar().updateArtworkPrioritySelection(ArtworkPriority.EMBEDDED_FIRST);
+            }
+        }
     }
 
     /**
@@ -245,6 +269,7 @@ public class SettingsManager {
             // 2. Theme & Language
             preferences.setTheme(ThemeManager.getInstance().getCurrentTheme().name());
             preferences.setLanguage(I18nManager.getInstance().getCurrentLocale().name());
+            preferences.setArtworkPriority(ArtworkCache.getInstance().getPriority().name());
 
             // 3. Playback Volume
             if (frame.getPlayerController() != null) {

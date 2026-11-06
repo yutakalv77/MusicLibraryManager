@@ -22,6 +22,9 @@ public class UserPreferences {
     private String language = "SYSTEM";
     private String theme = "DARK";
 
+    // Artwork Source Priority setting
+    private String artworkPriority = "EMBEDDED_FIRST";
+
     // Playback settings
     private int volumePercent = 80;
 
@@ -139,6 +142,14 @@ public class UserPreferences {
 
     public void setTheme(String theme) {
         this.theme = (theme != null && !theme.isBlank()) ? theme : "DARK";
+    }
+
+    public String getArtworkPriority() {
+        return artworkPriority != null ? artworkPriority : "EMBEDDED_FIRST";
+    }
+
+    public void setArtworkPriority(String artworkPriority) {
+        this.artworkPriority = (artworkPriority != null && !artworkPriority.isBlank()) ? artworkPriority : "EMBEDDED_FIRST";
     }
 
     public int getVolumePercent() {

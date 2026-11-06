@@ -3,6 +3,7 @@ package com.musiclibrary.ui.menu;
 import com.musiclibrary.i18n.AppLocale;
 import com.musiclibrary.i18n.I18nManager;
 import com.musiclibrary.model.RepeatMode;
+import com.musiclibrary.service.cache.ArtworkPriority;
 import com.musiclibrary.theme.AppTheme;
 import com.musiclibrary.theme.ThemeManager;
 import org.junit.jupiter.api.Assumptions;
@@ -68,11 +69,13 @@ class AppMenuBarTest {
         JMenu viewMenu = menuBar.getViewMenu();
         assertThat(viewMenu).isNotNull();
         assertThat(viewMenu.getText()).isEqualTo("View");
-        assertThat(viewMenu.getItemCount()).isEqualTo(4); // Theme sub, Lang sub, Sep, Mini Player
+        assertThat(viewMenu.getItemCount()).isEqualTo(5); // Theme sub, Lang sub, Artwork source sub, Sep, Mini Player
         assertThat(menuBar.getThemeSubMenu()).isNotNull();
         assertThat(menuBar.getThemeSubMenu().getItemCount()).isEqualTo(3);
         assertThat(menuBar.getLanguageSubMenu()).isNotNull();
         assertThat(menuBar.getLanguageSubMenu().getItemCount()).isEqualTo(3);
+        assertThat(menuBar.getArtworkSourceSubMenu()).isNotNull();
+        assertThat(menuBar.getArtworkSourceSubMenu().getItemCount()).isEqualTo(4);
         assertThat(menuBar.getMiniPlayerItem()).isNotNull();
         assertThat(menuBar.getMiniPlayerItem().getAccelerator())
                 .isEqualTo(KeyStroke.getKeyStroke(KeyEvent.VK_M, KeyEvent.CTRL_DOWN_MASK));
@@ -124,6 +127,7 @@ class AppMenuBarTest {
         AtomicBoolean prevClicked = new AtomicBoolean(false);
         AtomicReference<Boolean> shuffleState = new AtomicReference<>(null);
         AtomicReference<RepeatMode> repeatState = new AtomicReference<>(null);
+        AtomicReference<ArtworkPriority> priorityState = new AtomicReference<>(null);
         AtomicBoolean switchAccountClicked = new AtomicBoolean(false);
 
         menuBar.setOnAddFileAction(() -> addFileClicked.set(true));
@@ -133,6 +137,7 @@ class AppMenuBarTest {
         menuBar.setOnExitAction(() -> exitClicked.set(true));
         menuBar.setOnEditTagsAction(() -> editTagsClicked.set(true));
         menuBar.setOnMiniPlayerAction(() -> miniPlayerClicked.set(true));
+        menuBar.setOnArtworkPriorityAction(priorityState::set);
         menuBar.setOnPlayAction(() -> playClicked.set(true));
         menuBar.setOnPauseAction(() -> pauseClicked.set(true));
         menuBar.setOnNextAction(() -> nextClicked.set(true));
@@ -161,6 +166,18 @@ class AppMenuBarTest {
 
         menuBar.getMiniPlayerItem().doClick();
         assertThat(miniPlayerClicked.get()).isTrue();
+
+        menuBar.getFolderFirstArtworkSourceItem().doClick();
+        assertThat(priorityState.get()).isEqualTo(ArtworkPriority.FOLDER_FIRST);
+
+        menuBar.getEmbeddedFirstArtworkSourceItem().doClick();
+        assertThat(priorityState.get()).isEqualTo(ArtworkPriority.EMBEDDED_FIRST);
+
+        menuBar.getEmbeddedOnlyArtworkSourceItem().doClick();
+        assertThat(priorityState.get()).isEqualTo(ArtworkPriority.EMBEDDED_ONLY);
+
+        menuBar.getFolderOnlyArtworkSourceItem().doClick();
+        assertThat(priorityState.get()).isEqualTo(ArtworkPriority.FOLDER_ONLY);
 
         menuBar.getPlayItem().doClick();
         assertThat(playClicked.get()).isTrue();
@@ -211,6 +228,11 @@ class AppMenuBarTest {
         assertThat(menuBar.getRepeatOffItem().getText()).isEqualTo("リピートオフ");
         assertThat(menuBar.getRepeatAllItem().getText()).isEqualTo("全曲リピート");
         assertThat(menuBar.getRepeatOneItem().getText()).isEqualTo("1曲リピート");
+        assertThat(menuBar.getArtworkSourceSubMenu().getText()).isEqualTo("アートワークの取得元");
+        assertThat(menuBar.getEmbeddedFirstArtworkSourceItem().getText()).isEqualTo("埋め込み優先 (フォルダ画像へフォールバック)");
+        assertThat(menuBar.getFolderFirstArtworkSourceItem().getText()).isEqualTo("フォルダ画像優先 (cover.jpg, folder.jpg...)");
+        assertThat(menuBar.getEmbeddedOnlyArtworkSourceItem().getText()).isEqualTo("埋め込みのみ");
+        assertThat(menuBar.getFolderOnlyArtworkSourceItem().getText()).isEqualTo("フォルダ画像のみ");
 
         // Switch back to English
         I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
@@ -228,6 +250,11 @@ class AppMenuBarTest {
         assertThat(menuBar.getRepeatOffItem().getText()).isEqualTo("Repeat Off");
         assertThat(menuBar.getRepeatAllItem().getText()).isEqualTo("Repeat All");
         assertThat(menuBar.getRepeatOneItem().getText()).isEqualTo("Repeat One");
+        assertThat(menuBar.getArtworkSourceSubMenu().getText()).isEqualTo("Artwork Source");
+        assertThat(menuBar.getEmbeddedFirstArtworkSourceItem().getText()).isEqualTo("Embedded First (Fallback to Folder)");
+        assertThat(menuBar.getFolderFirstArtworkSourceItem().getText()).isEqualTo("Folder Image First (cover.jpg, folder.jpg...)");
+        assertThat(menuBar.getEmbeddedOnlyArtworkSourceItem().getText()).isEqualTo("Embedded Only");
+        assertThat(menuBar.getFolderOnlyArtworkSourceItem().getText()).isEqualTo("Folder Image Only");
     }
 
     @Test
@@ -312,8 +339,36 @@ class AppMenuBarTest {
             menuBar.getRepeatOffItem().doClick();
             menuBar.getRepeatAllItem().doClick();
             menuBar.getRepeatOneItem().doClick();
+            menuBar.getEmbeddedFirstArtworkSourceItem().doClick();
+            menuBar.getFolderFirstArtworkSourceItem().doClick();
+            menuBar.getEmbeddedOnlyArtworkSourceItem().doClick();
+            menuBar.getFolderOnlyArtworkSourceItem().doClick();
             menuBar.getSwitchAccountItem().doClick();
         }).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("Artwork priority selection sync updates radio items")
+    void testArtworkPrioritySelectionSync() {
+        AppMenuBar menuBar = new AppMenuBar();
+
+        menuBar.updateArtworkPrioritySelection(ArtworkPriority.FOLDER_FIRST);
+        assertThat(menuBar.getFolderFirstArtworkSourceItem().isSelected()).isTrue();
+        assertThat(menuBar.getEmbeddedFirstArtworkSourceItem().isSelected()).isFalse();
+
+        menuBar.updateArtworkPrioritySelection(ArtworkPriority.EMBEDDED_FIRST);
+        assertThat(menuBar.getEmbeddedFirstArtworkSourceItem().isSelected()).isTrue();
+        assertThat(menuBar.getFolderFirstArtworkSourceItem().isSelected()).isFalse();
+
+        menuBar.updateArtworkPrioritySelection(ArtworkPriority.EMBEDDED_ONLY);
+        assertThat(menuBar.getEmbeddedOnlyArtworkSourceItem().isSelected()).isTrue();
+
+        menuBar.updateArtworkPrioritySelection(ArtworkPriority.FOLDER_ONLY);
+        assertThat(menuBar.getFolderOnlyArtworkSourceItem().isSelected()).isTrue();
+
+        // null defaults to EMBEDDED_FIRST
+        menuBar.updateArtworkPrioritySelection(null);
+        assertThat(menuBar.getEmbeddedFirstArtworkSourceItem().isSelected()).isTrue();
     }
 
     @Test
@@ -393,5 +448,38 @@ class AppMenuBarTest {
             ThemeManager.getInstance().applyTheme(AppTheme.DARK);
             I18nManager.getInstance().setLocale(AppLocale.ENGLISH);
         }
+    }
+
+    @Test
+    @DisplayName("Artwork priority radio menu items maintain strict mutual exclusivity")
+    void testArtworkPriorityRadioMutualExclusivity() {
+        AppMenuBar menuBar = new AppMenuBar();
+
+        // Initially EMBEDDED_FIRST is selected
+        assertThat(menuBar.getEmbeddedFirstArtworkSourceItem().isSelected()).isTrue();
+        assertThat(menuBar.getFolderFirstArtworkSourceItem().isSelected()).isFalse();
+        assertThat(menuBar.getEmbeddedOnlyArtworkSourceItem().isSelected()).isFalse();
+        assertThat(menuBar.getFolderOnlyArtworkSourceItem().isSelected()).isFalse();
+
+        // Select FOLDER_FIRST
+        menuBar.getFolderFirstArtworkSourceItem().doClick();
+        assertThat(menuBar.getEmbeddedFirstArtworkSourceItem().isSelected()).isFalse();
+        assertThat(menuBar.getFolderFirstArtworkSourceItem().isSelected()).isTrue();
+        assertThat(menuBar.getEmbeddedOnlyArtworkSourceItem().isSelected()).isFalse();
+        assertThat(menuBar.getFolderOnlyArtworkSourceItem().isSelected()).isFalse();
+
+        // Select EMBEDDED_ONLY
+        menuBar.getEmbeddedOnlyArtworkSourceItem().doClick();
+        assertThat(menuBar.getEmbeddedFirstArtworkSourceItem().isSelected()).isFalse();
+        assertThat(menuBar.getFolderFirstArtworkSourceItem().isSelected()).isFalse();
+        assertThat(menuBar.getEmbeddedOnlyArtworkSourceItem().isSelected()).isTrue();
+        assertThat(menuBar.getFolderOnlyArtworkSourceItem().isSelected()).isFalse();
+
+        // Select FOLDER_ONLY
+        menuBar.getFolderOnlyArtworkSourceItem().doClick();
+        assertThat(menuBar.getEmbeddedFirstArtworkSourceItem().isSelected()).isFalse();
+        assertThat(menuBar.getFolderFirstArtworkSourceItem().isSelected()).isFalse();
+        assertThat(menuBar.getEmbeddedOnlyArtworkSourceItem().isSelected()).isFalse();
+        assertThat(menuBar.getFolderOnlyArtworkSourceItem().isSelected()).isTrue();
     }
 }

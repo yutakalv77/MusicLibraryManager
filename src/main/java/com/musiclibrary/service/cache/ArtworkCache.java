@@ -12,14 +12,24 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * High-performance, thread-safe LRU (Least Recently Used) in-memory cache for audio album artworks.
+ * Supports embedded artwork tags and folder artwork images (cover.jpg, folder.jpg, etc.) with
+ * configurable source priority.
  * <p>
  * Decodes and smoothly scales images on demand, caching them by {@code (trackId, width, height)}
  * to deliver ultra-responsive UI playback and table rendering without blocking EDT or exhausting heap memory.
@@ -28,6 +38,14 @@ public class ArtworkCache {
 
     public static final int DEFAULT_MAX_CAPACITY = 300;
     private static final String DEFAULT_PLACEHOLDER_ID = "__default_placeholder__";
+
+    public static final List<String> CANDIDATE_NAMES = List.of(
+            "cover.jpg", "cover.jpeg", "cover.png", "cover.webp",
+            "folder.jpg", "folder.jpeg", "folder.png", "folder.webp",
+            "front.jpg", "front.jpeg", "front.png",
+            "albumart.jpg", "albumart.jpeg", "albumart.png",
+            "album.jpg", "album.png"
+    );
 
     private static final ArtworkCache INSTANCE = new ArtworkCache();
 
@@ -43,6 +61,9 @@ public class ArtworkCache {
     private final int maxCapacity;
     private final Object lock = new Object();
     private final Map<CacheKey, Image> cache;
+    private final Map<Path, Optional<byte[]>> folderArtworkCache = new ConcurrentHashMap<>();
+
+    private volatile ArtworkPriority priority = ArtworkPriority.EMBEDDED_FIRST;
 
     private final AtomicLong hitCount = new AtomicLong(0);
     private final AtomicLong missCount = new AtomicLong(0);
@@ -80,10 +101,37 @@ public class ArtworkCache {
     }
 
     /**
-     * Retrieves or decodes and scales artwork image for the given track.
+     * Returns the current artwork resolution priority.
+     */
+    public ArtworkPriority getPriority() {
+        return priority;
+    }
+
+    /**
+     * Sets the artwork resolution priority and clears cached images if priority changed.
+     *
+     * @param priority target priority
+     */
+    public void setPriority(ArtworkPriority priority) {
+        ArtworkPriority target = (priority != null) ? priority : ArtworkPriority.EMBEDDED_FIRST;
+        if (this.priority != target) {
+            this.priority = target;
+            clear();
+        }
+    }
+
+    /**
+     * Clears all cached folder artwork binary entries.
+     */
+    public void clearFolderCache() {
+        folderArtworkCache.clear();
+    }
+
+    /**
+     * Retrieves or decodes and scales artwork image for the given track according to the configured priority.
      * If track is null or contains no artwork, returns a cached default placeholder image.
      *
-     * @param track  track containing artwork bytes
+     * @param track  track containing metadata and file path
      * @param width  target width in pixels
      * @param height target height in pixels
      * @return scaled Image instance
@@ -92,7 +140,8 @@ public class ArtworkCache {
         if (track == null) {
             return getDefaultImage(width, height);
         }
-        return getImage(track.getId(), track.getArtworkData(), width, height);
+        byte[] artworkData = resolveArtworkData(track);
+        return getImage(track.getId(), artworkData, width, height);
     }
 
     /**
@@ -141,6 +190,120 @@ public class ArtworkCache {
         }
 
         return scaled;
+    }
+
+    /**
+     * Resolves external folder artwork bytes for the track's parent directory if present.
+     *
+     * @param track track containing file path
+     * @return raw image bytes, or null if absent or not found
+     */
+    public byte[] getFolderArtworkData(Track track) {
+        if (track == null || track.getFilePath() == null || track.getFilePath().isBlank()) {
+            return null;
+        }
+        try {
+            Path trackPath = Path.of(track.getFilePath());
+            Path parentDir = trackPath.getParent();
+            if (parentDir == null) {
+                return null;
+            }
+            return getFolderArtworkData(parentDir);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Resolves external folder artwork bytes for the specified folder directory.
+     * Results are cached by folder path to prevent repeated disk I/O.
+     *
+     * @param folder folder directory
+     * @return raw image bytes, or null if absent or not found
+     */
+    public byte[] getFolderArtworkData(Path folder) {
+        if (folder == null) {
+            return null;
+        }
+        try {
+            Path normalized = folder.toAbsolutePath().normalize();
+            Optional<byte[]> cached = folderArtworkCache.computeIfAbsent(normalized, this::findFolderArtworkBytes);
+            return cached.orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Returns true if artwork is available for the given track under the current priority setting.
+     */
+    public boolean hasArtwork(Track track) {
+        if (track == null) {
+            return false;
+        }
+        return resolveArtworkData(track) != null;
+    }
+
+    /**
+     * Resolves raw artwork binary data for a track according to the active priority.
+     */
+    public byte[] resolveArtworkData(Track track) {
+        if (track == null) {
+            return null;
+        }
+        byte[] embedded = track.getArtworkData();
+        boolean hasEmbedded = (embedded != null && embedded.length > 0);
+
+        return switch (priority) {
+            case EMBEDDED_FIRST -> {
+                if (hasEmbedded) {
+                    yield embedded;
+                }
+                yield getFolderArtworkData(track);
+            }
+            case FOLDER_FIRST -> {
+                byte[] folderData = getFolderArtworkData(track);
+                if (folderData != null && folderData.length > 0) {
+                    yield folderData;
+                }
+                yield hasEmbedded ? embedded : null;
+            }
+            case EMBEDDED_ONLY -> hasEmbedded ? embedded : null;
+            case FOLDER_ONLY -> getFolderArtworkData(track);
+        };
+    }
+
+    private Optional<byte[]> findFolderArtworkBytes(Path folder) {
+        try {
+            if (folder == null || !Files.isDirectory(folder)) {
+                return Optional.empty();
+            }
+
+            Map<String, Path> lowerMap = new HashMap<>();
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(folder)) {
+                for (Path entry : stream) {
+                    if (Files.isRegularFile(entry)) {
+                        String name = entry.getFileName().toString().toLowerCase(Locale.ROOT);
+                        lowerMap.putIfAbsent(name, entry);
+                    }
+                }
+            }
+
+            for (String candidate : CANDIDATE_NAMES) {
+                Path match = lowerMap.get(candidate.toLowerCase(Locale.ROOT));
+                if (match != null) {
+                    try {
+                        byte[] bytes = Files.readAllBytes(match);
+                        if (bytes != null && bytes.length > 0) {
+                            return Optional.of(bytes);
+                        }
+                    } catch (IOException ignored) {
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return Optional.empty();
     }
 
     /**
@@ -193,12 +356,13 @@ public class ArtworkCache {
     }
 
     /**
-     * Clears all entries from the artwork cache.
+     * Clears all entries from the scaled image cache and the folder artwork cache.
      */
     public void clear() {
         synchronized (lock) {
             cache.clear();
         }
+        clearFolderCache();
     }
 
     /**

@@ -384,6 +384,17 @@ public class ControlBarPanel extends JPanel {
             return;
         }
         updateTrackInfo(track.getId(), track.getTitle(), track.getArtist(), track.getAlbum(), track.getArtworkData());
+        try {
+            Image scaled = ArtworkCache.getInstance().getImage(track, 38, 38);
+            if (scaled != null && scaled != ArtworkCache.getInstance().getDefaultImage(38, 38)) {
+                artworkLabel.setText(null);
+                artworkLabel.setIcon(new ImageIcon(scaled));
+            } else {
+                artworkLabel.setIcon(null);
+                artworkLabel.setText("🎵");
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     /**

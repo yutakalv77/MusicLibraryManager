@@ -15,6 +15,8 @@ import com.musiclibrary.model.Track;
 import com.musiclibrary.service.audio.AudioPlayer;
 import com.musiclibrary.service.audio.AudioPlayerFactory;
 import com.musiclibrary.service.audio.PlayerListener;
+import com.musiclibrary.service.cache.ArtworkCache;
+import com.musiclibrary.service.cache.ArtworkPriority;
 import com.musiclibrary.service.importer.FolderWatcherService;
 import com.musiclibrary.service.importer.ImportProgressListener;
 import com.musiclibrary.service.importer.ImportResult;
@@ -477,6 +479,8 @@ public class MainFrame extends JFrame {
         appMenuBar.setOnShuffleAction(playerController::setShuffle);
         appMenuBar.setOnRepeatModeAction(playerController::setRepeatMode);
         appMenuBar.setOnSwitchAccountAction(this::showAccountManagerDialog);
+        appMenuBar.setOnArtworkPriorityAction(this::setArtworkPriority);
+        appMenuBar.updateArtworkPrioritySelection(ArtworkCache.getInstance().getPriority());
 
         setJMenuBar(appMenuBar);
 
@@ -1624,6 +1628,50 @@ public class MainFrame extends JFrame {
         }
     }
 
+    /**
+     * Updates artwork resolution priority, persists settings, and refreshes visible UI displays.
+     *
+     * @param priority target artwork priority
+     */
+    public void setArtworkPriority(ArtworkPriority priority) {
+        if (priority == null) {
+            priority = ArtworkPriority.EMBEDDED_FIRST;
+        }
+        ArtworkCache.getInstance().setPriority(priority);
+        SettingsManager.getInstance().getPreferences().setArtworkPriority(priority.name());
+        SettingsManager.getInstance().save();
+        if (appMenuBar != null) {
+            appMenuBar.updateArtworkPrioritySelection(priority);
+        }
+        refreshArtworkDisplays();
+    }
+
+    private void refreshArtworkDisplays() {
+        if (controlBarPanel != null && audioPlayer != null) {
+            Track current = audioPlayer.getCurrentTrack();
+            if (current != null) {
+                controlBarPanel.updateTrackInfo(current);
+            }
+        }
+        if (albumGridViewPanel != null) {
+            albumGridViewPanel.setAlbums(getOrComputeAlbums(), true);
+        }
+        if (artistGridViewPanel != null) {
+            artistGridViewPanel.setArtists(getOrComputeArtists(), true);
+        }
+        if (albumHeaderPanel != null && albumHeaderPanel.isVisible()) {
+            if (albumHeaderPanel.getAlbum() != null) {
+                albumHeaderPanel.setAlbum(albumHeaderPanel.getAlbum());
+            } else if (albumHeaderPanel.getArtist() != null) {
+                albumHeaderPanel.setArtist(albumHeaderPanel.getArtist());
+            }
+        }
+        if (trackTablePanel != null) {
+            trackTablePanel.repaint();
+        }
+        repaint();
+    }
+
     @Override
     public void dispose() {
         try {
@@ -1733,6 +1781,26 @@ public class MainFrame extends JFrame {
 
     public JRadioButtonMenuItem getRepeatOneItem() {
         return appMenuBar != null ? appMenuBar.getRepeatOneItem() : null;
+    }
+
+    public JMenu getArtworkSourceSubMenu() {
+        return appMenuBar != null ? appMenuBar.getArtworkSourceSubMenu() : null;
+    }
+
+    public JRadioButtonMenuItem getEmbeddedFirstArtworkSourceItem() {
+        return appMenuBar != null ? appMenuBar.getEmbeddedFirstArtworkSourceItem() : null;
+    }
+
+    public JRadioButtonMenuItem getFolderFirstArtworkSourceItem() {
+        return appMenuBar != null ? appMenuBar.getFolderFirstArtworkSourceItem() : null;
+    }
+
+    public JRadioButtonMenuItem getEmbeddedOnlyArtworkSourceItem() {
+        return appMenuBar != null ? appMenuBar.getEmbeddedOnlyArtworkSourceItem() : null;
+    }
+
+    public JRadioButtonMenuItem getFolderOnlyArtworkSourceItem() {
+        return appMenuBar != null ? appMenuBar.getFolderOnlyArtworkSourceItem() : null;
     }
 
     public FastSearchIndex getSearchIndex() {
